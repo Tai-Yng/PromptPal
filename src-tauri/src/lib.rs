@@ -3,6 +3,14 @@ use tauri::PhysicalPosition;
 use tauri::WebviewWindowBuilder;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::menu::{Menu, MenuItem};
+
+/// 退出应用
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
 
 /// 获取当前活跃窗口标题（Windows only）
 #[tauri::command]
@@ -246,7 +254,8 @@ pub fn run() {
         sync_load,
         gitee_verify,
         gitee_push,
-        gitee_pull
+        gitee_pull,
+        exit_app
     ])
     .setup(|app| {
         // 日志
@@ -291,13 +300,32 @@ pub fn run() {
         }
 
         // 系统托盘
-        let _tray = tauri::tray::TrayIconBuilder::new()
+        let show_item = MenuItem::with_id(app, "show", "Show Panel", true, None::<&str>)?;
+        let exit_item = MenuItem::with_id(app, "exit", "Exit PromptPal", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&show_item, &exit_item])?;
+
+        let _tray = TrayIconBuilder::new()
             .icon(app.default_window_icon().unwrap().clone())
             .tooltip("PromptPal")
+            .menu(&menu)
+            .on_menu_event(|app, event| {
+                match event.id.as_ref() {
+                    "show" => {
+                        if let Some(panel) = app.get_webview_window("panel") {
+                            let _ = panel.show();
+                            let _ = panel.set_focus();
+                        }
+                    }
+                    "exit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                }
+            })
             .on_tray_icon_event(|tray, event| {
-                if let tauri::tray::TrayIconEvent::Click {
-                    button: tauri::tray::MouseButton::Left,
-                    button_state: tauri::tray::MouseButtonState::Up,
+                if let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
                     ..
                 } = event
                 {

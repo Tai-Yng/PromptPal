@@ -27,7 +27,6 @@ let walkDirection: 1 | -1 = -1
 let workArea = { width: 1920, height: 1080 }
 let randomPauseCounter = 0
 let isPaused = false
-let moveSpeed = 3
 
 // 定时器
 let moveTimer: number | null = null
@@ -197,8 +196,10 @@ const move = async () => {
     return
   }
 
-  // 正常行走：速度随机微调
-  moveSpeed = 2 + Math.floor(Math.abs(Math.sin(Date.now() / 3000)) * 3)
+  // 正常行走：速度从配置读取（walkSpeed 0.1~1.0 映射到 1~6 像素/帧）
+  const speed = 1 + Math.round(settingsStore.petConfig.walkSpeed * 5)
+  const jitter = Math.floor(Math.abs(Math.sin(Date.now() / 3000)) * 2)
+  const moveSpeed = speed + jitter
   let x = windowX + moveSpeed * walkDirection
 
   if (x <= b.left) { x = b.left; walkDirection = 1 }
@@ -217,6 +218,7 @@ const handleMouseDown = async (e: MouseEvent) => {
   // 只有左键可以拖拽
   if (e.button !== 0) return
   
+  wakeUp()
   isDragging.value = true
   state.value = 'idle'
   
@@ -319,11 +321,32 @@ const openPanel = () => {
   invoke('show_panel').catch(() => {})
 }
 
+const quitApp = () => {
+  closeContextMenu()
+  invoke('exit_app').catch(() => {})
+}
+
 // ============ 睡眠 ============
+let lastActivityTime = Date.now()
 const enterSleep = () => {
   if (state.value !== 'sleeping' && !isCopying.value && !isDragging.value) {
     state.value = 'sleeping'
     showSleepZzz.value = true
+  }
+}
+const wakeUp = () => {
+  lastActivityTime = Date.now()
+  if (state.value === 'sleeping') {
+    state.value = 'walk'
+    showSleepZzz.value = false
+  }
+}
+const checkSleep = () => {
+  const timeout = settingsStore.petConfig.sleepTimeout * 1000
+  if (timeout <= 0) return
+  if (Date.now() - lastActivityTime > timeout) {
+    enterSleep()
+    lastActivityTime = Date.now()
   }
 }
 
@@ -352,7 +375,7 @@ onMounted(async () => {
 
   state.value = 'walk'
   moveTimer = window.setInterval(move, 120)
-  sleepTimer = window.setInterval(enterSleep, 120000)
+  sleepTimer = window.setInterval(checkSleep, 10000)
   contextTimer = window.setInterval(checkContext, 5000)
 })
 
@@ -410,8 +433,8 @@ onUnmounted(() => {
     </Transition>
 
     <div v-if="showContextMenu" class="context-menu" @click.stop>
-      <div class="menu-item" @click="openPanel">打开面板</div>
-      <div class="menu-item" @click="closeContextMenu">关闭</div>
+      <div class="menu-item" @click="openPanel">Show Panel</div>
+      <div class="menu-item" @click="quitApp" style="color: #FCA5A5">Exit</div>
     </div>
   </div>
 </template>

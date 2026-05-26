@@ -630,6 +630,13 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
           Create a token at <a href="https://gitee.com/profile/personal_access_tokens" target="_blank">gitee.com</a> with <strong>projects</strong> scope.
         </div>
       </div>
+
+      <!-- Exit -->
+      <div class="exit-row">
+        <button class="exit-btn" @click="invoke('exit_app').catch(() => {})">
+          <span class="exit-sym">x</span> exit PromptPal
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -966,6 +973,35 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
 .sync-hint a:hover { text-decoration: underline; }
 .hint-icon { color: var(--warning); margin-right: 4px; }
 .hint-sub { opacity: 0.6; font-size: 9px; }
+
+/* ── Exit ── */
+.exit-row {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  justify-content: center;
+}
+.exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #FCA5A5;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+.exit-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--error);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+.exit-sym { opacity: 0.7; }
 
 /* ── Provider Grid ── */
 .provider-grid {

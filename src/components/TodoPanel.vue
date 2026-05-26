@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useTodoStore } from '../stores/todoStore'
+import { useTodoStore, type PlanItem } from '../stores/todoStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
 const todoStore = useTodoStore()
@@ -11,16 +11,16 @@ type ViewMode = 'plan' | string  // 'plan' | category_id
 const viewMode = ref<ViewMode>('plan')
 
 const isPlanView = computed(() => viewMode.value === 'plan')
-const activeCatId = computed(() => isPlanView.value ? '' : viewMode.value as string)
 
-const showList = computed(() => {
-  if (isPlanView.value) return todoStore.planItems
-  // 分类视图：只显示未完成的
-  return todoStore.itemsByCategory(viewMode.value as string).filter(i => !i.done)
+// 分类视图：只显示未完成任务
+const categoryItems = computed(() => {
+  if (isPlanView.value) return []
+  return todoStore.items.filter(i => i.category === viewMode.value && !i.done)
 })
 
-const showActive = computed(() => showList.value.filter(i => !i.done))
-const showDone = computed(() => isPlanView.value ? showList.value.filter(i => i.done) : [])
+// Plan 视图：显示所有 plan 项
+const planActiveItems = computed(() => todoStore.planActive)
+const planDoneItems = computed(() => todoStore.planDone)
 
 const planCount = computed(() => todoStore.planActive.length)
 
@@ -35,16 +35,18 @@ const addNewCategory = () => {
   showAddCat.value = false
 }
 
-// Add task
+// Add task (分类视图)
 const newTaskText = ref('')
-const activeCat = ref('work')
 const addTask = () => {
   const text = newTaskText.value.trim()
   if (!text) return
-  const cat = isPlanView.value ? activeCat.value : (viewMode.value as string)
-  const item = todoStore.addItem(text, cat)
-  // plan 视图下直接加入计划
-  if (isPlanView.value && item) todoStore.togglePlan(item.id)
+  if (isPlanView.value) {
+    // plan 视图：直接添加到 plan
+    todoStore.addDirectToPlan(text, 'work')
+  } else {
+    // 分类视图：添加到当前分类
+    todoStore.addItem(text, viewMode.value as string)
+  }
   newTaskText.value = ''
 }
 const handleKeydown = (e: KeyboardEvent) => {
@@ -55,7 +57,6 @@ const handleKeydown = (e: KeyboardEvent) => {
 const showAiInput = ref(false)
 const aiPrompt = ref('')
 const isGenerating = ref(false)
-const aiTargetCat = ref('work')
 
 const generateWithAi = async () => {
   const prompt = aiPrompt.value.trim()
@@ -113,9 +114,28 @@ const generateWithAi = async () => {
   }
 }
 
-const clearDone = () => { if (showDone.value.length > 0) todoStore.clearDone() }
+const clearPlanDone = () => {
+  if (planDoneItems.value.length > 0) todoStore.clearPlanDone()
+}
 
-const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id)
+// 拖拽排序（基于ID，解决active列表索引与完整planItems不对齐的问题）
+const dragItemId = ref<string | null>(null)
+const onDragStart = (e: DragEvent, item: PlanItem) => {
+  dragItemId.value = item.id
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+const onDragOver = (e: DragEvent) => {
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+}
+const onDrop = (e: DragEvent, targetItem: PlanItem) => {
+  e.preventDefault()
+  if (dragItemId.value && dragItemId.value !== targetItem.id) {
+    todoStore.reorderPlan(dragItemId.value, targetItem.id)
+  }
+  dragItemId.value = null
+}
+const onDragEnd = () => { dragItemId.value = null }
 </script>
 
 <template>
@@ -169,7 +189,7 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
         <span class="cat-chip-sm" :style="{ '--cc': todoStore.getCategoryColor(viewMode) }">
           {{ todoStore.categories.find(c => c.id === viewMode)?.name || viewMode }}
         </span>
-        <span class="ind-count dim">({{ showActive.length }} / {{ showList.length }})</span>
+        <span class="ind-count dim">({{ categoryItems.length }} tasks)</span>
       </template>
     </div>
 
@@ -178,31 +198,22 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
       <div class="todo-input-row">
         <span class="prompt-sym">&gt;</span>
         <input
-          v-model="newTaskText" class="todo-input" placeholder="add task..."
+          v-model="newTaskText" class="todo-input" :placeholder="isPlanView ? 'add to plan...' : 'add task...'"
           @keydown="handleKeydown" :disabled="isGenerating"
         />
-        <select v-if="isPlanView" v-model="activeCat" class="cat-select">
-          <option v-for="c in todoStore.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
         <button class="add-btn" @click="addTask" :disabled="isGenerating">+</button>
       </div>
     </div>
 
-    <!-- AI generate -->
-    <div class="ai-toggle-row">
+    <!-- AI generate (only in category view) -->
+    <div v-if="!isPlanView" class="ai-toggle-row">
       <button class="ai-toggle-btn" @click="showAiInput = !showAiInput">
         <span class="ai-sym">{{ showAiInput ? '-' : '+' }}</span>
         generate with AI
       </button>
     </div>
 
-    <div v-if="showAiInput" class="ai-section">
-      <div class="ai-cat-pick">
-        <span class="pick-label">to:</span>
-        <select v-model="aiTargetCat" class="cat-select">
-          <option v-for="c in todoStore.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-      </div>
+    <div v-if="showAiInput && !isPlanView" class="ai-section">
       <div class="ai-hint">AI generates tasks auto-categorized using your tags.</div>
       <div class="todo-input-row ai-row">
         <span class="prompt-sym dim">&gt;</span>
@@ -221,41 +232,97 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
 
     <!-- List -->
     <div class="todo-list">
-      <!-- Active -->
-      <div v-for="item in showActive" :key="item.id" class="todo-item">
-        <button
-          class="plan-btn"
-          :class="{ on: item.inPlan }"
-          :title="item.inPlan ? 'remove from plan' : 'add to plan'"
-          @click="todoStore.togglePlan(item.id)"
-        >
-          {{ item.inPlan ? '−plan' : '+plan' }}
-        </button>
-        <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }" :title="item.category"></span>
-        <button class="check-btn" title="done" @click="todoStore.toggleItem(item.id)">☐</button>
-        <span class="todo-text" @click="todoStore.toggleItem(item.id)">{{ item.text }}</span>
-        <button class="del-btn" title="delete" @click="todoStore.deleteItem(item.id)">×</button>
-      </div>
-
-      <!-- Done -->
-      <template v-if="showDone.length > 0">
-        <div class="done-header">
-          <span class="done-dash">── done ──</span>
-          <button class="clear-done-btn" @click="clearDone">clear all</button>
+      <!-- ========== Plan 视图 ========== -->
+      <template v-if="isPlanView">
+        <!-- GO GO! / STOP 按钮 -->
+        <div class="focus-bar">
+          <template v-if="!todoStore.focusMode">
+            <button
+              class="gogo-btn"
+              :disabled="planActiveItems.length === 0"
+              @click="todoStore.startFocus()"
+            >
+              <span class="gogo-icon">▶</span> GO GO!
+            </button>
+            <span v-if="planActiveItems.length === 0" class="gogo-hint">add tasks to plan first</span>
+            <span v-else class="gogo-hint">{{ planActiveItems.length }} tasks ready</span>
+          </template>
+          <template v-else>
+            <button class="stop-btn" @click="todoStore.stopFocus()">
+              <span class="stop-icon">■</span> STOP
+            </button>
+            <span class="gogo-hint active">focus mode — hover pet to see task</span>
+          </template>
         </div>
-        <div v-for="item in showDone" :key="item.id" class="todo-item done">
-          <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }"></span>
-          <button class="check-btn done" title="undo" @click="todoStore.toggleItem(item.id)">☑</button>
-          <span class="todo-text" @click="todoStore.toggleItem(item.id)">{{ item.text }}</span>
-          <button class="del-btn" title="delete" @click="todoStore.deleteItem(item.id)">×</button>
+
+        <!-- Active (支持拖拽排序) -->
+        <div
+          v-for="(item, index) in planActiveItems"
+          :key="item.id"
+          class="todo-item"
+          :class="{ 'drag-over': dragItemId === item.id }"
+          draggable="true"
+          @dragstart="onDragStart($event, item)"
+          @dragover="onDragOver"
+          @drop="onDrop($event, item)"
+          @dragend="onDragEnd"
+        >
+          <span class="drag-handle" title="drag to reorder">⠿</span>
+          <button
+            class="plan-btn on"
+            title="remove from plan"
+            @click="todoStore.removeFromPlan(item.id)"
+          >
+            −plan
+          </button>
+          <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }" :title="item.category"></span>
+          <button class="check-btn" title="done" @click="todoStore.togglePlanItem(item.id)">☐</button>
+          <span class="todo-text" @click="todoStore.togglePlanItem(item.id)">{{ item.text }}</span>
+          <span v-if="index === 0 && todoStore.focusMode" class="focus-badge">NOW</span>
+        </div>
+
+        <!-- Done -->
+        <template v-if="planDoneItems.length > 0">
+          <div class="done-header">
+            <span class="done-dash">── done ──</span>
+            <button class="clear-done-btn" @click="clearPlanDone">clear all</button>
+          </div>
+          <div v-for="item in planDoneItems" :key="item.id" class="todo-item done">
+            <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }"></span>
+            <button class="check-btn done" title="undo" @click="todoStore.togglePlanItem(item.id)">☑</button>
+            <span class="todo-text" @click="todoStore.togglePlanItem(item.id)">{{ item.text }}</span>
+            <button class="del-btn" title="delete" @click="todoStore.removeFromPlan(item.id)">×</button>
+          </div>
+        </template>
+
+        <div v-if="planActiveItems.length === 0 && planDoneItems.length === 0" class="empty-hint">
+          <span class="hint-sym">&gt;</span>
+          pick tasks from categories to plan your day
         </div>
       </template>
 
-      <div v-if="showList.length === 0" class="empty-hint">
-        <span class="hint-sym">&gt;</span>
-        <template v-if="isPlanView">pick tasks from categories to plan your day</template>
-        <template v-else>no tasks yet. add some or generate with AI</template>
-      </div>
+      <!-- ========== 分类视图 ========== -->
+      <template v-else>
+        <div v-for="item in categoryItems" :key="item.id" class="todo-item">
+          <button
+            class="plan-btn"
+            :class="{ on: todoStore.isInPlan(item.id) }"
+            :title="todoStore.isInPlan(item.id) ? 'already in plan' : 'add to plan'"
+            :disabled="todoStore.isInPlan(item.id)"
+            @click="todoStore.addToPlan(item.id)"
+          >
+            {{ todoStore.isInPlan(item.id) ? 'in plan' : '+plan' }}
+          </button>
+          <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }"></span>
+          <span class="todo-text">{{ item.text }}</span>
+          <button class="del-btn" title="delete" @click="todoStore.deleteItem(item.id)">×</button>
+        </div>
+
+        <div v-if="categoryItems.length === 0" class="empty-hint">
+          <span class="hint-sym">&gt;</span>
+          no tasks yet. add some or generate with AI
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -342,12 +409,6 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
 }
 .todo-input::placeholder { color: var(--text-muted); }
 .todo-input:disabled { opacity: 0.4; }
-.cat-select {
-  background: transparent; border: 1px solid var(--border-color);
-  color: var(--text-muted); font-family: var(--font-mono); font-size: 11px;
-  border-radius: var(--radius-sm); padding: 3px 6px; cursor: pointer; outline: none;
-}
-.cat-select:focus { border-color: var(--primary); }
 .add-btn {
   width: 28px; height: 28px;
   border: 1px solid var(--border-color); background: transparent;
@@ -369,8 +430,6 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
 .ai-toggle-btn:hover { color: var(--primary); }
 .ai-sym { font-size: 12px; }
 .ai-section { margin-bottom: 6px; }
-.ai-cat-pick { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.pick-label { color: var(--text-muted); font-size: 10px; }
 .ai-hint { color: var(--text-muted); font-size: 10px; opacity: 0.6; padding: 2px 0 6px; }
 .ai-row { margin-top: 2px; }
 
@@ -394,11 +453,15 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
   transition: all var(--transition-fast);
   white-space: nowrap;
 }
-.plan-btn:hover { border-color: var(--primary); color: var(--primary); }
+.plan-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
 .plan-btn.on {
   border-color: var(--primary);
   color: var(--primary);
   background: rgba(99, 102, 241, 0.1);
+}
+.plan-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 .cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .check-btn {
@@ -429,4 +492,85 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
 /* ── Empty ── */
 .empty-hint { color: var(--text-muted); font-size: 12px; padding: 20px 0; opacity: 0.5; }
 .hint-sym { color: var(--text-muted); margin-right: 4px; }
+
+/* ── Focus Bar ── */
+.focus-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  margin-bottom: 4px;
+}
+.gogo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+}
+.gogo-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+}
+.gogo-btn:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
+.gogo-icon { font-size: 11px; }
+.gogo-hint { font-size: 10px; color: var(--text-muted); opacity: 0.6; }
+.gogo-hint.active { color: var(--primary); opacity: 0.8; }
+
+.stop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid #EF4444;
+  border-radius: var(--radius-sm);
+  color: #EF4444;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+.stop-btn:hover { background: #EF4444; color: #fff; }
+.stop-icon { font-size: 10px; }
+
+/* ── Drag ── */
+.drag-handle {
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: grab;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.todo-item:hover .drag-handle { opacity: 0.7; }
+.todo-item.drag-over { border-top: 2px solid var(--primary); }
+
+/* ── Focus Badge ── */
+.focus-badge {
+  font-size: 8px;
+  font-weight: 700;
+  color: #0a0a0f;
+  background: var(--primary);
+  padding: 1px 6px;
+  border-radius: 8px;
+  letter-spacing: 0.5px;
+  animation: pulse-badge 1.5s ease-in-out infinite;
+}
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 </style>

@@ -7,8 +7,17 @@ export interface TodoItem {
   done: boolean
   createdAt: number
   category: string
-  inPlan: boolean
   source?: string
+}
+
+// Plan 项是独立的副本，有自己的完成状态
+export interface PlanItem {
+  id: string
+  text: string
+  done: boolean
+  createdAt: number
+  category: string
+  sourceId?: string
 }
 
 export interface TodoCategory {
@@ -31,19 +40,26 @@ const CAT_COLORS = [
 export const useTodoStore = defineStore('todo', () => {
   const items = ref<TodoItem[]>([])
   const categories = ref<TodoCategory[]>([...DEFAULT_CATEGORIES])
+  const planItems = ref<PlanItem[]>([])
 
-  // 计算: 今日计划(从所有分类挑选的)
-  const planItems = computed(() => items.value.filter(i => i.inPlan))
+  // 专注模式状态
+  const focusMode = ref(false)
+  // 专注模式完成动画: 'complete' | 'celebrate' | null
+  const focusAnim = ref<'complete' | 'celebrate' | null>(null)
+
+  // 计算
   const planActive = computed(() => planItems.value.filter(i => !i.done))
   const planDone = computed(() => planItems.value.filter(i => i.done))
 
-  // 某个分类下的任务
-  const itemsByCategory = (catId: string) => items.value.filter(i => i.category === catId)
+  // 当前专注任务：planActive 中的第一个（优先级最高）
+  const currentFocusTask = computed(() => planActive.value[0] || null)
+
+  const itemsByCategory = (catId: string) => items.value.filter(i => i.category === catId && !i.done)
 
   const getCategoryColor = (catId: string) =>
     categories.value.find(c => c.id === catId)?.color || '#6B7280'
 
-  // Category
+  // ===== Category =====
   const addCategory = (name: string) => {
     const id = name.toLowerCase().replace(/\s+/g, '-')
     if (categories.value.find(c => c.id === id)) return
@@ -60,11 +76,11 @@ export const useTodoStore = defineStore('todo', () => {
     save()
   }
 
-  // Todo
+  // ===== Todo =====
   const addItem = (text: string, category = 'work') => {
     items.value.unshift({
       id: crypto.randomUUID(), text, done: false,
-      createdAt: Date.now(), category, inPlan: false
+      createdAt: Date.now(), category
     })
     save()
   }
@@ -73,20 +89,10 @@ export const useTodoStore = defineStore('todo', () => {
     for (let i = texts.length - 1; i >= 0; i--) {
       items.value.unshift({
         id: crypto.randomUUID(), text: texts[i], done: false,
-        createdAt: Date.now(), category, inPlan: false
+        createdAt: Date.now(), category
       })
     }
     save()
-  }
-
-  const toggleItem = (id: string) => {
-    const item = items.value.find(i => i.id === id)
-    if (item) { item.done = !item.done; save() }
-  }
-
-  const togglePlan = (id: string) => {
-    const item = items.value.find(i => i.id === id)
-    if (item) { item.inPlan = !item.inPlan; save() }
   }
 
   const deleteItem = (id: string) => {
@@ -94,14 +100,104 @@ export const useTodoStore = defineStore('todo', () => {
     save()
   }
 
-  const clearDone = () => {
-    items.value = items.value.filter(i => !i.done)
+  // ===== Plan 操作 =====
+  const addToPlan = (todoId: string) => {
+    const todo = items.value.find(i => i.id === todoId)
+    if (!todo) return
+    if (planItems.value.some(p => p.sourceId === todoId)) return
+    planItems.value.unshift({
+      id: crypto.randomUUID(),
+      text: todo.text,
+      done: false,
+      createdAt: Date.now(),
+      category: todo.category,
+      sourceId: todoId
+    })
     save()
+  }
+
+  const removeFromPlan = (planId: string) => {
+    planItems.value = planItems.value.filter(i => i.id !== planId)
+    save()
+  }
+
+  const togglePlanItem = (planId: string) => {
+    const item = planItems.value.find(i => i.id === planId)
+    if (item) { item.done = !item.done; save() }
+  }
+
+  const clearPlanDone = () => {
+    planItems.value = planItems.value.filter(i => !i.done)
+    save()
+  }
+
+  const addDirectToPlan = (text: string, category = 'work') => {
+    planItems.value.unshift({
+      id: crypto.randomUUID(),
+      text, done: false,
+      createdAt: Date.now(), category
+    })
+    save()
+  }
+
+  const isInPlan = (todoId: string) => {
+    return planItems.value.some(p => p.sourceId === todoId)
+  }
+
+  // ===== 拖拽排序（基于ID，解决active/done列表索引不对齐问题）=====
+  const reorderPlan = (fromId: string, toId: string) => {
+    const list = [...planItems.value]
+    const fromIdx = list.findIndex(i => i.id === fromId)
+    const toIdx = list.findIndex(i => i.id === toId)
+    if (fromIdx === -1 || toIdx === -1) return
+    const [moved] = list.splice(fromIdx, 1)
+    list.splice(toIdx, 0, moved)
+    planItems.value = list
+    save()
+  }
+
+  // ===== 专注模式 =====
+  const startFocus = () => {
+    // 检查是否有未完成的任务
+    const hasActive = planItems.value.some(i => !i.done)
+    if (!hasActive) return
+    focusMode.value = true
+    save()
+  }
+
+  const stopFocus = () => {
+    focusMode.value = false
+    focusAnim.value = null
+    save()
+  }
+
+  // 完成当前专注任务
+  const completeFocusTask = () => {
+    const task = currentFocusTask.value
+    if (!task) return
+    task.done = true
+    save()
+
+    // 判断是否全部完成
+    if (planActive.value.length === 0) {
+      focusAnim.value = 'celebrate'
+      setTimeout(() => {
+        focusAnim.value = null
+        focusMode.value = false
+        save()
+      }, 3000)
+    } else {
+      focusAnim.value = 'complete'
+      setTimeout(() => { focusAnim.value = null }, 1500)
+    }
   }
 
   const save = () => {
     localStorage.setItem('promptpal_todos', JSON.stringify(items.value))
     localStorage.setItem('promptpal_todo_cats', JSON.stringify(categories.value))
+    localStorage.setItem('promptpal_plan_items', JSON.stringify(planItems.value))
+    localStorage.setItem('promptpal_focus_mode', JSON.stringify(focusMode.value))
+    localStorage.setItem('promptpal_focus_anim', JSON.stringify(focusAnim.value))
   }
 
   const load = () => {
@@ -113,16 +209,60 @@ export const useTodoStore = defineStore('todo', () => {
       const s = localStorage.getItem('promptpal_todo_cats')
       if (s) categories.value = JSON.parse(s)
     } catch {}
+    try {
+      const s = localStorage.getItem('promptpal_plan_items')
+      if (s) planItems.value = JSON.parse(s)
+    } catch {}
+    try {
+      const s = localStorage.getItem('promptpal_focus_mode')
+      if (s) focusMode.value = JSON.parse(s)
+    } catch {}
+    try {
+      const s = localStorage.getItem('promptpal_focus_anim')
+      if (s) focusAnim.value = JSON.parse(s) as 'complete' | 'celebrate' | null
+    } catch {}
   }
 
   load()
 
+  // ===== 跨窗口同步 =====
+  // Panel 和 Pet 在不同 Tauri 窗口，Pinia store 不共享。
+  // 监听 storage 事件，当另一个窗口写入 localStorage 时自动重载。
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key && e.key.startsWith('promptpal_')) {
+        // 只重载 focus 和 plan 数据（其他数据 pet 窗口用不上）
+        if (e.key === 'promptpal_focus_mode') {
+          try {
+            const s = localStorage.getItem('promptpal_focus_mode')
+            if (s !== null) focusMode.value = JSON.parse(s)
+          } catch {}
+        }
+        if (e.key === 'promptpal_focus_anim') {
+          try {
+            const s = localStorage.getItem('promptpal_focus_anim')
+            if (s !== null) focusAnim.value = JSON.parse(s) as 'complete' | 'celebrate' | null
+          } catch {}
+        }
+        if (e.key === 'promptpal_plan_items') {
+          try {
+            const s = localStorage.getItem('promptpal_plan_items')
+            if (s !== null) planItems.value = JSON.parse(s)
+          } catch {}
+        }
+      }
+    })
+  }
+
   return {
-    items, categories,
-    planItems, planActive, planDone,
+    items, categories, planItems,
+    planActive, planDone,
+    currentFocusTask, focusMode, focusAnim,
     getCategoryColor, itemsByCategory,
     addCategory, deleteCategory,
-    addItem, addItems,
-    toggleItem, togglePlan, deleteItem, clearDone
+    addItem, addItems, deleteItem,
+    addToPlan, removeFromPlan, togglePlanItem, clearPlanDone, addDirectToPlan,
+    isInPlan, reorderPlan,
+    startFocus, stopFocus, completeFocusTask
   }
 })

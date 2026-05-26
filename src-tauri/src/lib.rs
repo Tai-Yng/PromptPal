@@ -309,8 +309,8 @@ pub fn run() {
             if let Ok(monitor) = pet_win.current_monitor() {
                 if let Some(monitor) = monitor {
                     let size = monitor.size();
-                    let ww = 120i32;
-                    let wh = 200i32;
+                    let ww = 340i32;
+                    let wh = 380i32;
                     let margin = 20i32;
                     let x = size.width as i32 - ww - margin;
                     let y = size.height as i32 - wh - margin;

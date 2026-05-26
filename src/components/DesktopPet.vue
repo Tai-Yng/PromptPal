@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
 import { usePromptStore } from '../stores/promptStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { usePetStyleStore } from '../stores/petStyleStore'
+import { useTodoStore } from '../stores/todoStore'
+import type { PlanItem } from '../stores/todoStore'
 
 const petStore = usePetStyleStore()
 
@@ -42,6 +44,80 @@ let windowStartY = 0
 
 // 快捷方式
 const settingsStore = useSettingsStore()
+
+// ============ 专注模式 ============
+const todoStore = useTodoStore()
+const isHovering = ref(false)
+
+// 是否显示专注气泡：悬浮 + 专注模式开启 + 有当前任务
+const showFocusBubble = computed(() => {
+  return isHovering.value && todoStore.focusMode && todoStore.currentFocusTask
+})
+
+// 完成动画状态
+const focusBubbleState = computed(() => todoStore.focusAnim)
+
+// 专注模式 CSS class
+const focusClass = computed(() => ({
+  celebrating: todoStore.focusAnim === 'celebrate',
+  taskComplete: todoStore.focusAnim === 'complete'
+}))
+
+// Polling 同步：每2秒从 localStorage 重载（storage 事件的 fallback）
+let syncTimer: number | null = null
+const syncTodoStore = () => {
+  try {
+    const fm = localStorage.getItem('promptpal_focus_mode')
+    if (fm !== null) todoStore.focusMode = JSON.parse(fm)
+  } catch {}
+  try {
+    const pi = localStorage.getItem('promptpal_plan_items')
+    if (pi !== null) todoStore.planItems = JSON.parse(pi)
+  } catch {}
+  try {
+    const fa = localStorage.getItem('promptpal_focus_anim')
+    if (fa !== null) todoStore.focusAnim = JSON.parse(fa) as 'complete' | 'celebrate' | null
+    else todoStore.focusAnim = null
+  } catch {}
+}
+
+// 完成当前任务（直接操作 localStorage，避免跨窗口 store 竞争）
+const completeFocusTask = () => {
+  try {
+    const raw = localStorage.getItem('promptpal_plan_items')
+    if (!raw) return
+    const items: PlanItem[] = JSON.parse(raw)
+    const target = items.find(i => !i.done)
+    if (!target) return
+
+    target.done = true
+    localStorage.setItem('promptpal_plan_items', JSON.stringify(items))
+
+    const remainingActive = items.filter(i => !i.done)
+    if (remainingActive.length === 0) {
+      localStorage.setItem('promptpal_focus_mode', JSON.stringify(false))
+      localStorage.setItem('promptpal_focus_anim', JSON.stringify('celebrate'))
+      setTimeout(() => {
+        localStorage.setItem('promptpal_focus_anim', JSON.stringify(null))
+      }, 3000)
+    } else {
+      localStorage.setItem('promptpal_focus_anim', JSON.stringify('complete'))
+      setTimeout(() => {
+        localStorage.setItem('promptpal_focus_anim', JSON.stringify(null))
+      }, 1500)
+    }
+  } catch {}
+
+  // 立即同步本地 store 以触发 UI 更新
+  syncTodoStore()
+}
+const handleMouseEnter = () => {
+  isHovering.value = true
+  wakeUp()
+}
+const handleMouseLeave = () => {
+  isHovering.value = false
+}
 
 // ============ 智能气泡 ============
 const showSuggestBubble = ref(false)
@@ -137,8 +213,8 @@ const updateWorkArea = async () => {
   } catch {/* ignore */}
 }
 
-const groundY = () => workArea.height - 200 - 8
-const bounds = () => ({ left: 8, right: workArea.width - 120 - 8 })
+const groundY = () => workArea.height - 380 - 8
+const bounds = () => ({ left: 8, right: workArea.width - 340 - 8 })
 
 // ============ 丰富行走行为 ============
 const getRandomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min
@@ -208,7 +284,7 @@ const move = async () => {
   windowX = x; windowY = groundY()
   direction.value = walkDirection === 1 ? 'right' : 'left'
 
-  const maxX = workArea.width - 140
+  const maxX = workArea.width - 340
   const finalX = Math.min(windowX, maxX)
   try { await getCurrentWindow().setPosition({ type: 'Logical', x: Math.round(finalX), y: Math.round(windowY) }) } catch {/* ignore */}
 }
@@ -242,8 +318,8 @@ const handleMouseMove = async (e: MouseEvent) => {
   windowY = windowStartY + deltaY
   
   // 限制在屏幕范围内
-  const maxX = workArea.width - 120
-  const maxY = workArea.height - 150
+  const maxX = workArea.width - 340
+  const maxY = workArea.height - 380
   windowX = Math.max(0, Math.min(windowX, maxX))
   windowY = Math.max(0, Math.min(windowY, maxY))
   
@@ -361,8 +437,8 @@ onMounted(async () => {
     try {
       const pos = JSON.parse(savedPosition)
       // 确保位置在屏幕范围内
-      const maxX = workArea.width - 120
-      const maxY = workArea.height - 150
+      const maxX = workArea.width - 340
+      const maxY = workArea.height - 380
       windowX = Math.max(0, Math.min(pos.x, maxX))
       windowY = Math.max(0, Math.min(pos.y, maxY))
     } catch {
@@ -377,11 +453,13 @@ onMounted(async () => {
   moveTimer = window.setInterval(move, 120)
   sleepTimer = window.setInterval(checkSleep, 10000)
   contextTimer = window.setInterval(checkContext, 5000)
+  syncTimer = window.setInterval(syncTodoStore, 2000)  // 跨窗口同步 fallback
 })
 
 onUnmounted(() => {
   if (moveTimer) clearInterval(moveTimer)
   if (sleepTimer) clearInterval(sleepTimer)
+  if (syncTimer) clearInterval(syncTimer)
   if (contextTimer) clearInterval(contextTimer)
   if (suggestDismissTimer) clearTimeout(suggestDismissTimer)
   document.removeEventListener('mousemove', handleMouseMove)
@@ -393,11 +471,13 @@ onUnmounted(() => {
   <div class="pet-window" :style="petStore.cssVariables">
     <div
       class="pet-container"
-      :class="[direction, state, { copying: isCopying, dragging: isDragging }]"
+      :class="[direction, state, { copying: isCopying, dragging: isDragging }, focusClass]"
       @mousedown="handleMouseDown"
       @click="handleClick"
       @dblclick="handleDblClick"
       @contextmenu="handleContextMenu"
+      @mouseenter="handleMouseEnter"
+      @mouseleave="handleMouseLeave"
     >
       <!-- 桌宠形象 -->
       <div class="pet-body">
@@ -432,6 +512,33 @@ onUnmounted(() => {
       </div>
     </Transition>
 
+    <!-- 专注模式任务气泡 -->
+    <Transition name="bubble">
+      <div v-if="showFocusBubble && focusBubbleState === null" class="focus-bubble" @click.stop="completeFocusTask">
+        <div class="focus-bubble-header">
+          <span class="focus-label">NOW</span>
+          <span class="focus-hint">click to done</span>
+        </div>
+        <div class="focus-task-text">{{ todoStore.currentFocusTask?.text }}</div>
+        <div class="focus-progress">{{ todoStore.planDone.length }} / {{ todoStore.planItems.length }}</div>
+      </div>
+    </Transition>
+
+    <!-- 完成动画气泡 -->
+    <Transition name="bubble">
+      <div v-if="showFocusBubble && focusBubbleState === 'complete'" class="focus-bubble complete-anim">
+        <div class="complete-text">✓ Done!</div>
+      </div>
+    </Transition>
+
+    <!-- 庆祝动画气泡 -->
+    <Transition name="bubble">
+      <div v-if="showFocusBubble && focusBubbleState === 'celebrate'" class="focus-bubble celebrate-anim">
+        <div class="celebrate-text">🎉 ALL DONE!</div>
+        <div class="celebrate-sub">Great job!</div>
+      </div>
+    </Transition>
+
     <div v-if="showContextMenu" class="context-menu" @click.stop>
       <div class="menu-item" @click="openPanel">Show Panel</div>
       <div class="menu-item" @click="quitApp" style="color: #FCA5A5">Exit</div>
@@ -441,8 +548,8 @@ onUnmounted(() => {
 
 <style scoped>
 .pet-window {
-  width: 120px;
-  height: 200px;
+  width: 340px;
+  height: 380px;
   background: transparent;
   position: relative;
   display: flex;
@@ -705,6 +812,152 @@ onUnmounted(() => {
 
 .bubble-enter-active, .bubble-leave-active { transition: all 0.2s ease; }
 .bubble-enter-from, .bubble-leave-to { opacity: 0; transform: translateX(-50%) translateY(4px); }
+
+/* ── Focus Bubble ── */
+.focus-bubble {
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(9, 9, 11, 0.95);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  border-radius: 12px;
+  padding: 10px 16px;
+  min-width: 180px;
+  max-width: 240px;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.2);
+  font-family: var(--font-mono);
+}
+.focus-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid rgba(99, 102, 241, 0.5);
+}
+.focus-bubble:hover {
+  border-color: #818CF8;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(99, 102, 241, 0.35);
+  transform: translateX(-50%) scale(1.03);
+}
+.focus-bubble-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.focus-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #0a0a0f;
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 1px;
+}
+.focus-hint {
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.focus-task-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.focus-progress {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+  opacity: 0.7;
+}
+
+/* 完成动画 */
+.complete-anim {
+  border-color: #22C55E;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(34, 197, 94, 0.3);
+  text-align: center;
+  padding: 12px 24px;
+}
+.complete-anim::after { border-top-color: #22C55E; }
+.complete-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #22C55E;
+  animation: pop-complete 0.4s ease-out;
+}
+
+/* 庆祝动画 */
+.celebrate-anim {
+  border-color: #F59E0B;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 25px rgba(245, 158, 11, 0.35);
+  text-align: center;
+  padding: 14px 24px;
+}
+.celebrate-anim::after { border-top-color: #F59E0B; }
+.celebrate-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #F59E0B;
+  animation: pop-celebrate 0.5s ease-out;
+}
+.celebrate-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* 桌宠动画 */
+.pet-container.taskComplete .pet-body {
+  animation: pet-bounce 0.4s ease-out;
+}
+.pet-container.celebrating .pet-body {
+  animation: pet-celebrate 0.6s ease-out;
+}
+.pet-container.celebrating .antenna-ball {
+  background: #F59E0B;
+  box-shadow: 0 0 20px #F59E0B;
+}
+.pet-container.celebrating .core {
+  background: #F59E0B;
+  box-shadow: 0 0 15px #F59E0B;
+  opacity: 1;
+}
+
+@keyframes pop-complete {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes pop-celebrate {
+  0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+  50% { transform: scale(1.3) rotate(5deg); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes pet-bounce {
+  0% { transform: translateY(0); }
+  30% { transform: translateY(-15px); }
+  50% { transform: translateY(-15px) scaleX(0.9) scaleY(1.1); }
+  70% { transform: translateY(0) scaleX(1.1) scaleY(0.9); }
+  100% { transform: translateY(0) scaleX(1) scaleY(1); }
+}
+@keyframes pet-celebrate {
+  0% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-20px) rotate(-10deg); }
+  40% { transform: translateY(-20px) rotate(10deg); }
+  60% { transform: translateY(-10px) rotate(-5deg); }
+  80% { transform: translateY(-10px) rotate(5deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
 
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 @keyframes leg-move { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }

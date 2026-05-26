@@ -16,15 +16,19 @@ PromptPal is a Windows desktop application that helps you manage, generate, and 
 ### Desktop Pet
 - Tech-style robot pet with antenna, visor, and glowing eyes
 - 8 built-in color themes (Cyan Tech, Crimson Bot, Violet Core, etc.)
-- Customizable colors, body shapes, and proportions
+- Customizable colors, body shapes, and proportions — applies immediately
 - Idle wandering with randomized pauses, direction changes, and hops
 - Context-aware: detects the active window and suggests relevant prompts
+- Configurable walk speed (0.1x–1.0x) and sleep timeout (1–10 min or off)
+- Drag to reposition, persistent across sessions
 
 ### Prompt Management
 - Create, edit, and delete custom prompts
-- Category tags for organization
-- Card preview: click to expand, double-click to copy
-- Local storage via browser localStorage
+- Category tags (Chat, Code, Image, Writing, Other)
+- Card preview: click to expand/collapse, double-click to copy content
+- Favorite marking with star indicator
+- Usage count tracking
+- Auto-export to file on every change
 
 ### AI Generation
 - Generate new prompts via AI API (DeepSeek / OpenAI / Claude / Custom)
@@ -32,14 +36,25 @@ PromptPal is a Windows desktop application that helps you manage, generate, and 
 - Streaming token-by-token output
 
 ### Quick Inject (`Ctrl+Alt+P`)
-- Global hotkey pops up a floating prompt picker
+- Global system-wide hotkey
+- Pops up a floating prompt picker
 - Arrow keys navigate, Enter to copy to clipboard
-- Works system-wide in any application
+
+### CLI Tool (`pal`)
+- Interactive terminal prompt picker
+- Category-grouped list with arrow key navigation
+- Instantly copies selected prompt to clipboard
+- Reads from `~/.promptpal/promptpal_data.json` (auto-exported by the app)
 
 ### Data Sync
 - **Gitee cloud sync**: push/pull your prompt library to a Gitee repository
 - **Local import/export**: JSON file backup via browser download
-- Requires a Gitee personal access token with `projects` scope
+- Gitee personal access token with `projects` scope required
+
+### App Exit (3 ways)
+- System tray icon right-click → Exit PromptPal
+- Desktop pet right-click → Exit
+- Settings panel → x exit PromptPal button
 
 ## Screenshots
 
@@ -55,38 +70,45 @@ PromptPal is a Windows desktop application that helps you manage, generate, and 
 | AI APIs | DeepSeek / OpenAI / Claude (configurable) |
 | Styling | CSS custom properties, JetBrains Mono, terminal aesthetics |
 | Sync | Gitee API v5 (via Rust `ureq`) |
+| CLI | Node.js + @inquirer/prompts |
 
 ## Project Structure
 
 ```
 PromptPal/
-├── public/                  # Static assets
+├── public/
 ├── src/
 │   ├── components/
-│   │   ├── DesktopPet.vue   # Animated robot pet
-│   │   ├── PanelPage.vue    # Main panel host
-│   │   ├── PromptPanel.vue  # Prompt list & categories
-│   │   ├── PromptCard.vue   # Expandable prompt card
-│   │   ├── PromptEditor.vue # Prompt create/edit form
+│   │   ├── DesktopPet.vue       # Robot pet (animated CSS)
+│   │   ├── PanelPage.vue        # Main panel host
+│   │   ├── PromptPanel.vue      # Prompt list & categories
+│   │   ├── PromptCard.vue       # Expandable prompt card
+│   │   ├── PromptEditor.vue     # Prompt edit form
 │   │   ├── AIGeneratePanel.vue  # AI prompt generation
-│   │   ├── QuickInject.vue  # Ctrl+Alt+P floating injector
-│   │   ├── SettingsPanel.vue    # Config (AI, Pet, Sync)
+│   │   ├── QuickInject.vue      # Ctrl+Alt+P floating window
+│   │   ├── SettingsPanel.vue    # AI / Pet / Sync config
 │   │   ├── NetworkSearch.vue    # Web prompt search
-│   │   ├── ContextMenu.vue      # Right-click context menu
-│   │   └── HoloMenu.vue         # Holographic menu overlay
+│   │   └── ContextMenu.vue      # Pet right-click menu
 │   ├── stores/
-│   │   ├── promptStore.ts   # Prompt CRUD state
-│   │   ├── settingsStore.ts # AI & pet config
-│   │   └── petStyleStore.ts # Pet theme/style state
+│   │   ├── promptStore.ts       # Prompt CRUD + auto-export
+│   │   ├── settingsStore.ts     # AI & pet config
+│   │   └── petStyleStore.ts     # Pet themes & styles
 │   ├── services/
-│   │   └── platform.ts      # Platform detection & Tauri bridge
+│   │   └── platform.ts          # Platform detection
+│   ├── types/
+│   │   └── index.ts             # TypeScript types
 │   ├── App.vue
 │   ├── main.ts
-│   └── style.css            # Global CSS tokens & terminal theme
+│   └── style.css                # Terminal theme CSS tokens
+├── cli/
+│   ├── bin/pal.js               # CLI entry point
+│   └── package.json
 ├── src-tauri/
-│   ├── src/lib.rs           # Tauri commands (Gitee API, hotkey, etc.)
+│   ├── src/lib.rs               # Tauri commands + Gitee API
 │   ├── Cargo.toml
-│   └── capabilities/        # Tauri permission manifests
+│   └── capabilities/
+├── docs/
+│   └── PromptPal功能文档.md
 ├── index.html
 ├── vite.config.ts
 ├── tsconfig.json
@@ -113,25 +135,22 @@ npm run tauri build
 # Output: src-tauri/target/release/bundle/nsis/PromptPal_1.0.0_x64-setup.exe
 ```
 
+### CLI Setup
+
+```bash
+cd cli && npm install && npm link
+pal
+```
+
 ## AI Providers & Models
 
-| Provider | Available Models |
-|----------|-----------------|
+| Provider | Models |
+|----------|--------|
 | DeepSeek | `deepseek-chat`, `deepseek-reasoner`, `deepseek-coder`, `deepseek-v4`, `deepseek-v3` |
-| OpenAI | `gpt-4.1`, `gpt-4o`, `gpt-4o-mini`, `o4-mini`, `o3-mini`, `gpt-4-turbo` |
-| Claude | `claude-sonnet-4`, `claude-3.5-sonnet`, `claude-3.5-haiku`, `claude-3-opus` |
+| OpenAI | `gpt-4.1`, `gpt-4o`, `gpt-4o-mini`, `o4-mini`, `o3-mini` |
+| Claude | `claude-sonnet-4`, `claude-3.5-sonnet`, `claude-3.5-haiku` |
 | Custom | Any OpenAI-compatible endpoint |
-
-## Known Limitations
-
-- Custom sprite import for the desktop pet is not yet supported.
-- Network search for prompts from external platforms is experimental.
-- Claude provider uses a different API format; generation may require adjustments.
 
 ## License
 
 MIT
-
----
-
-**PromptPal** — manage prompts like a terminal wizard.

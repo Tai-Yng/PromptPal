@@ -1,7 +1,7 @@
 # PromptPal 功能文档
 
-> 一个桌面 Prompt 管理工具，带有可爱的像素风格桌宠助手
-> 创建日期：2026-05-17
+> 科技感终端风桌面 Prompt 管理工具，带有 DeepSeek 风格机器人桌宠
+> 更新日期：2026-05-26
 
 ---
 
@@ -9,88 +9,76 @@
 
 | 模块 | 功能 | 状态 |
 |------|------|------|
-| 桌宠系统 | 像素风格机器人，支持移动、互动、休眠 | ✅ 完成 |
-| Prompt 管理 | 本地存储、分类、搜索、收藏 | ✅ 完成 |
-| 网络搜索 | 从网络获取热门 Prompt | ✅ 完成 |
-| AI 生成 | 接入 OpenAI/DeepSeek/Claude API | ✅ 完成 |
-| 样式自定义 | 主题切换、颜色调整、精灵图导入 | ✅ 完成 |
+| 桌宠系统 | CSS 绘制科技风机器人，自动行走、智能感知、拖拽移动 | ✅ 完成 |
+| Prompt 管理 | 本地存储、分类、搜索、收藏、导入导出 | ✅ 完成 |
+| AI 生成 | 接入 DeepSeek/OpenAI/Claude API，流式输出 | ✅ 完成 |
+| 快捷注入 | Ctrl+Alt+P 全局热键，任意应用内选择粘贴 | ✅ 完成 |
+| 数据同步 | Gitee 云端同步、本地 JSON 文件导入导出 | ✅ 完成 |
+| CLI 工具 | 终端交互式提示词选择器 (`pal` 命令) | ✅ 完成 |
+| 样式自定义 | 8 套预设主题、颜色调整、形状参数 | ✅ 完成 |
 
 ---
 
 ## 一、桌宠系统
 
-### 1.1 基础行为
+### 1.1 外观
+- **风格**：科技风机器人（CSS 绘制），天线 + 面罩 + 发光眼睛 + 核心
+- **位置**：桌面右下角
+- **尺寸**：120x200 像素窗口
 
-- **位置**：默认在屏幕右上角
-- **移动**：沿屏幕边缘自动巡逻
-- **速度**：可自定义（0.1x - 1.0x），默认 0.3x
-- **休眠**：无操作一段时间后自动休眠（可设置 1/2/5/10 分钟或永不）
+### 1.2 行为
 
-### 1.2 互动功能
+| 行为 | 说明 |
+|------|------|
+| 自动行走 | 沿屏幕底部水平移动，到边缘自动调头 |
+| 随机暂停 | 约 6% 概率暂停，模拟思考状态 |
+| 随机跳帧 | 约 1.5% 概率小幅跳跃 |
+| 随机调头 | 约 2% 概率中途改变方向 |
+| 速度微调 | 行走速度带有正弦波抖动，更自然 |
+| 休眠 | 空闲超时后进入睡眠（显示 Zzz），可配置或关闭 |
+
+### 1.3 互动
 
 | 操作 | 效果 |
 |------|------|
-| 单击 | 打开 Prompt 面板 |
-| 双击 | 快速复制默认提示词（可在设置中指定） |
-| 右键 | 打开快捷菜单 |
-| 拖拽 | 移动桌宠位置 |
-| 悬停 | 暂停走动并播放开心跳动画 |
+| 拖拽 | 移动桌宠到任意位置，松开后记忆位置 |
+| 单击 | 复制默认提示词到剪贴板（可配置开关） |
+| 双击 | 打开 Prompt 管理面板 |
+| 右键 | 弹出菜单：Show Panel / Exit |
 
-> **提示**：单击有 250ms 延迟，用于区分单击和双击操作
-
-### 1.3 微动作系统
-
-桌宠会随机执行以下动作：
-- 🥱 打哈欠（yawn）
-- 🙆 伸懒腰（stretch）
-- 👀 左右看（look-around）
-- 😮‍💨 叹气（sigh）- 空闲太久时
-- 🎉 开心跳（happy-jump）- 复制成功时
-
-### 1.4 状态指示
-
-- **悬停提示**：显示命令行风格提示
-- **暂停徽章**：显示 ❚❚ 图标
-- **睡眠动画**：显示 Zzz 气泡
+### 1.4 智能感知
+- 每 5 秒检测当前活跃窗口标题
+- 匹配预设规则（ChatGPT、VS Code、Midjourney、Obsidian 等）
+- 弹出气泡建议匹配的提示词，点击即可复制
+- 同一窗口 30 分钟内不重复提示
 
 ---
 
 ## 二、Prompt 管理系统
 
-### 2.1 本地 Prompt
+### 2.1 本地管理
 
-- **添加**：点击 "+ new" 创建新 Prompt
-- **编辑**：点击卡片进入编辑模式
-- **删除**：点击删除按钮移除
-- **收藏**：编辑时设置 favorite，或点击卡片星标
-- **复制**：一键复制到剪贴板
-- **默认提示词**：点击 ★ 按钮设置/取消默认，显示荧光背景和 "DEFAULT" 标签
-- **自定义分类**：编辑时可输入自定义分类
+| 功能 | 说明 |
+|------|------|
+| 创建 | 输入标题、内容、分类、标签 |
+| 编辑 | 点击卡片编辑按钮，修改任意字段 |
+| 删除 | 点击删除按钮移除 |
+| 收藏 | 星标标记，可在列表筛选 |
+| 复制 | 双击卡片内容区域 |
+| 分类 | Chat / Code / Image / Writing / Other |
 
-### 2.2 分类系统
+### 2.2 卡片交互
 
-预设分类：
-- 🎨 Art（艺术创作）
-- 💻 Code（编程开发）
-- ✍️ Writing（写作）
-- 💼 Business（商业）
-- 🎮 Game（游戏）
-- 📚 Learning（学习）
+| 操作 | 效果 |
+|------|------|
+| 点击卡片 | 展开/折叠，查看完整内容 |
+| 双击内容 | 复制到剪贴板 |
+| 使用计数 | 每次复制自动 +1，按次数排序 |
 
-### 2.3 搜索功能
-
-- 实时模糊搜索
-- 支持标题、内容、标签搜索
-- 分类过滤
-- 收藏过滤
-
-### 2.4 网络搜索
-
-- 从网络 API 获取热门 Prompt
-- 支持关键词搜索
-- 支持按分类筛选（Code/Art/Writing/Business/Game/Learning）
-- 支持导入到本地
-- 预留真实 API 接口（PromptHero/OpenArt/FlowGPT）
+### 2.3 导入导出
+- **导出**：浏览器下载 JSON 文件
+- **导入**：选择 JSON 文件恢复数据
+- **自动导出**：每次修改提示词后 2 秒自动保存到 `~/.promptpal/promptpal_data.json`
 
 ---
 
@@ -98,296 +86,151 @@
 
 ### 3.1 支持的 AI 提供商
 
-| 提供商 | 图标 | 默认模型 |
-|--------|------|----------|
-| DeepSeek | 🐋 | deepseek-chat |
-| OpenAI | 🅾️ | gpt-4 |
-| Claude | 🅲️ | claude-3-opus |
-| Custom | ⚙️ | 自定义 |
+| 提供商 | 模型示例 |
+|--------|----------|
+| DeepSeek | deepseek-chat, deepseek-reasoner, deepseek-v4 |
+| OpenAI | gpt-4.1, gpt-4o, gpt-4o-mini, o4-mini |
+| Claude | claude-sonnet-4, claude-3.5-sonnet |
+| Custom | 任意 OpenAI 兼容端点 |
 
 ### 3.2 功能模式
-
 - **生成模式**：根据描述生成新 Prompt
 - **优化模式**：改进现有 Prompt 质量
-
-### 3.3 配置说明
-
-```typescript
-// 配置项
-{
-  provider: 'deepseek' | 'openai' | 'claude' | 'custom',
-  apiKey: string,      // API 密钥（本地存储）
-  apiUrl: string,      // 自定义 API 地址
-  model: string        // 模型名称
-}
-```
+- **流式输出**：实时逐字显示生成结果
 
 ---
 
-## 四、样式自定义系统
+## 四、快捷注入系统
 
-### 4.1 预设主题（8套）
-
-| 主题 | 图标 | 主色调 |
-|------|------|--------|
-| Cyan Tech | 🔵 | 青色 #00D4AA |
-| Crimson Bot | 🔴 | 红色 #EF4444 |
-| Emerald Unit | 🟢 | 绿色 #22C55E |
-| Violet Core | 🟣 | 紫色 #A855F7 |
-| Amber Droid | 🟠 | 橙色 #F97316 |
-| Rose Companion | 🩷 | 粉色 #EC4899 |
-| Golden Bot | 🟡 | 金色 #EAB308 |
-| Arctic Unit | ⚪ | 白色 #E2E8F0 |
-
-### 4.2 颜色自定义
-
-可调整的颜色项：
-- `primaryColor` - 主色（眼睛、核心）
-- `secondaryColor` - 次色（天线球）
-- `bodyColor` - 身体颜色
-- `bodyBorderColor` - 身体边框
-- `visorColor` - 面罩颜色
-- `eyeColor` - 眼睛发光色
-
-### 4.3 形状参数
-
-- `headSize` - 头部大小（0.5x - 1.5x）
-- `bodySize` - 身体大小（0.5x - 1.5x）
-- `antennaHeight` - 天线高度（0.5x - 1.5x）
-
-### 4.4 精灵图导入
-
-支持从外部导入自定义精灵图：
-- 上传本地图片（PNG/WebP）
-- 粘贴图片 URL
-- 兼容 Petdex / Codex 格式
+### 全局热键：`Ctrl+Alt+P`
+- 系统级快捷键，任意应用中可用
+- 弹出 380x440 浮动窗口
+- ↑↓ 键选择 Prompt
+- Enter 复制到剪贴板
+- 自动关闭
 
 ---
 
-## 五、设置系统
+## 五、CLI 命令行工具
 
-### 5.1 AI 配置
-
-- 提供商选择
-- API Key 输入
-- 模型选择
-- 连接测试
-
-### 5.2 桌宠配置
-
-| 设置项 | 说明 | 默认值 |
-|--------|------|--------|
-| sleep_timeout | 休眠时间 | 2 分钟 |
-| walk_speed | 走动速度 | 0.3x |
-| default_prompt | 双击复制的默认提示词 | 第一个提示词 |
-
-### 5.3 样式配置
-
-- 主题选择
-- 颜色调整
-- 精灵图导入
-
----
-
-## 六、技术架构
-
-### 6.1 技术栈
-
-- **框架**：Vue 3 + TypeScript
-- **构建**：Vite
-- **状态管理**：Pinia
-- **样式**：CSS Variables + Scoped CSS
-
-### 6.2 项目结构
-
-```
-PromptPal/
-├── src/
-│   ├── components/          # Vue 组件
-│   │   ├── DesktopPet.vue   # 桌宠组件
-│   │   ├── PromptPanel.vue  # Prompt 面板
-│   │   ├── SettingsPanel.vue # 设置面板
-│   │   ├── AIGeneratePanel.vue # AI 生成面板
-│   │   ├── PetStyleSettings.vue # 样式设置
-│   │   ├── NetworkSearch.vue # 网络搜索
-│   │   ├── PromptCard.vue   # Prompt 卡片
-│   │   └── PromptEditor.vue # Prompt 编辑器
-│   ├── stores/              # Pinia 状态管理
-│   │   ├── settingsStore.ts # 设置状态
-│   │   ├── promptStore.ts   # Prompt 状态
-│   │   └── petStyleStore.ts # 样式状态
-│   ├── types/               # TypeScript 类型
-│   ├── App.vue              # 根组件
-│   └── main.ts              # 入口文件
-```
-
-### 6.3 数据持久化
-
-使用 `localStorage` 存储：
-- `promptpal_prompts` - Prompt 数据
-- `promptpal_ai_config` - AI 配置
-- `promptpal_pet_config` - 桌宠配置
-- `promptpal_pet_style` - 样式配置
-
----
-
-## 七、使用指南
-
-### 7.1 快速开始
-
-1. 启动应用后，桌宠出现在右上角
-2. 单击桌宠打开 Prompt 面板
-3. 右键桌宠 → 设置 → 配置 AI API
-4. 开始使用 Prompt 管理和 AI 生成功能
-
-### 7.2 快捷操作
-
-| 操作 | 方式 |
-|------|------|
-| 打开面板 | 单击桌宠 |
-| 快速复制提示词 | 双击桌宠 |
-| 打开设置 | 右键桌宠 → 设置 |
-| AI 生成 | 右键桌宠 → AI 生成 Prompt |
-| 关闭面板 | 点击红色圆点 / 点击空白处 / 按 ESC |
-| 移动面板 | 拖动标题栏 |
-| 暂停/恢复桌宠 | Win + Space |
-
-### 7.3 CLI 命令行工具
-
-在终端中使用 `Pal` 命令快速访问提示词：
-
+### 使用
 ```bash
-# 交互式选择
-Pal
-
-# 直接搜索
-Pal react
-
-# 随机获取
-Pal -r
-
-# 按分类搜索
-Pal -c code
-
-# 列出所有
-Pal list
+pal
 ```
+- 上下箭头选择提示词
+- 分类分组显示（标注收藏 * 和使用次数）
+- Enter 复制到剪贴板
+- Ctrl+C 退出
 
-**安装方式**：
+### 安装
 ```bash
 cd cli
 npm install
 npm link
 ```
 
----
-
-## 八、更新日志
-
-### v2.0 (2026-05-18)
-
-**新增功能**
-- ✅ Tauri Windows 桌面应用 - 使用 Rust + Tauri 构建原生 Windows 应用
-- ✅ 无边框透明窗口 - 更沉浸的桌面体验
-- ✅ 系统托盘支持 - 点击托盘图标显示/隐藏窗口
-- ✅ 安装包支持 - MSI 和 NSIS 两种安装格式，支持自定义安装目录
-
-### v1.9 (2026-05-18)
-
-**修复**
-- 修复桌宠微动作动画不生效（CSS 选择器层级错误）
-- 修复双击复制被拖拽事件拦截的问题
-- 修复鼠标悬停互动不生效的问题
-- 修复网络搜索分类切换不重新搜索的问题
-
-### v1.8 (2026-05-18)
-
-**新增功能**
-- ✅ CLI 命令行工具 - 在终端中使用 `Pal` 或 `\Pal` 快速访问提示词
-
-### v1.7 (2026-05-18)
-
-**新增功能**
-- ✅ 网络搜索功能接入真实 API 服务
-- ✅ 支持按分类筛选网络提示词
-
-**修复**
-- 修复鼠标悬停桌宠互动功能
-
-### v1.6 (2026-05-18)
-
-**新增功能**
-- ✅ Prompt 编辑器支持收藏设置（favorite 开关）
-- ✅ Prompt 编辑器支持自定义分类输入
-- ✅ 鼠标悬停桌宠时暂停并播放开心跳动画
-
-### v1.5 (2026-05-18)
-
-**新增功能**
-- ✅ Prompt 面板中可直接设置/取消默认提示词（点击 ★ 按钮）
-- ✅ Win+Space 快捷键控制桌宠暂停/恢复
-
-### v1.4 (2026-05-18)
-
-**新增功能**
-- ✅ 默认提示词整个卡片显示荧光背景
-- ✅ Prompt 面板支持拖拽移动（拖动标题栏）
-
-### v1.3 (2026-05-18)
-
-**新增功能**
-- ✅ Prompt 面板中默认提示词显示荧光色 "DEFAULT" 标签
-
-**修复**
-- 修复桌宠样式比例问题
-
-### v1.2 (2026-05-18)
-
-**新增功能**
-- ✅ 点击面板外部空白处关闭 Prompt 面板
-
-### v1.1 (2026-05-18)
-
-**新增功能**
-- ✅ 双击桌宠快速复制默认提示词
-- ✅ 设置中可指定默认提示词
-
-**优化**
-- 单击延迟 250ms 以区分单击/双击操作
-
-### v1.0 (2026-05-17)
-
-**新增功能**
-- ✅ 桌宠基础系统（移动、互动、休眠）
-- ✅ Prompt 本地管理
-- ✅ 网络搜索功能
-- ✅ AI 生成 Prompt
-- ✅ 8 套预设主题
-- ✅ 颜色和形状自定义
-- ✅ 精灵图导入
-- ✅ 走动速度自定义
-
-**优化**
-- 默认走动速度从 0.6 降至 0.3
-- UI 采用终端 CLI 风格
+### 数据源
+读取 `~/.promptpal/promptpal_data.json`（PromptPal 自动导出）
 
 ---
 
-## 九、待开发功能
+## 六、数据同步
 
-- [ ] 真实网络 API 接入
-- [ ] Prompt 分享功能
-- [ ] 更多桌宠动作
-- [ ] 音效支持
-- [ ] 多语言支持
-- [ ] 导入/导出配置
+### Gitee 云端同步
+- 配置 token + owner/repo + 文件路径
+- push：上传本地数据到 Gitee 仓库
+- pull：从 Gitee 拉取数据到本地
+- verify：测试连接
+- Token 需要 `projects` 权限
+
+### 本地文件
+- export：下载 JSON 备份
+- import：从 JSON 恢复
 
 ---
 
-## 相关链接
+## 七、样式自定义系统
 
-- [[开发笔记]]
-- [[API 文档]]
-- [[组件说明]]
+### 7.1 预设主题（8套）
 
-#PromptPal #桌面应用 #Vue3 #TypeScript
+| 主题 | 主色调 |
+|------|--------|
+| Cyan Tech | 青色 #00D4AA |
+| Crimson Bot | 红色 #EF4444 |
+| Emerald Unit | 绿色 #22C55E |
+| Violet Core | 紫色 #A855F7 |
+| Amber Droid | 橙色 #F97316 |
+| Rose Companion | 粉色 #EC4899 |
+| Golden Bot | 金色 #EAB308 |
+| Arctic Unit | 白色 #E2E8F0 |
+
+### 7.2 颜色自定义
+- primaryColor — 主色（眼睛、核心）
+- secondaryColor — 次色（天线球）
+- bodyColor — 身体颜色
+- bodyBorderColor — 身体边框
+- visorColor — 面罩颜色
+- eyeColor — 眼睛发光色
+
+### 7.3 形状参数（0.5x–1.5x）
+- headSize — 头部大小
+- bodySize — 身体大小
+- antennaHeight — 天线高度
+
+---
+
+## 八、技术架构
+
+### 技术栈
+| 层 | 技术 |
+|----|------|
+| 前端 | Vue 3 + TypeScript + Pinia |
+| 构建 | Vite 8 |
+| 桌面 | Tauri 2.x (Rust) |
+| 热键 | tauri-plugin-global-shortcut |
+| API | DeepSeek / OpenAI / Claude |
+| 同步 | Gitee API v5 (ureq) |
+| CLI | Node.js + @inquirer/prompts |
+| 样式 | CSS 变量 + DeepSeek CMD 终端暗色主题 |
+
+### 数据持久化（localStorage）
+- `promptpal_prompts` — Prompt 数据
+- `promptpal_categories` — 分类数据
+- `promptpal_ai_config` — AI 配置
+- `promptpal_pet_config` — 桌宠配置
+- `promptpal_pet_style` — 样式配置
+- `promptpal_gitee_config` — Gitee 同步配置
+
+---
+
+## 九、使用指南
+
+### 快速开始
+1. 启动后桌宠出现在桌面右下角
+2. 双击桌宠 → 打开管理面板
+3. Settings → AI Config → 填入 API Key
+4. 开始创建和管理 Prompt
+5. 任意应用中 Ctrl+Alt+P 快速选取
+6. 终端中 `pal` 命令选取
+
+### 退出方式
+- 系统托盘右键 → Exit PromptPal
+- 桌宠右键 → Exit
+- Settings 底部 → x exit PromptPal
+
+---
+
+## 更新日志
+
+### v1.0.0 (2026-05-26)
+- DeepSeek CMD 终端风 UI 全面改造
+- 桌宠颜色/形状即时生效
+- 退出功能（托盘/右键/Settings 三入口）
+- Gitee 云端同步（push/pull）
+- Ctrl+Alt+P 全局快捷注入
+- CLI 工具 `pal` 命令
+- AI 模型列表扩展（DeepSeek V3/V4, GPT-4.1 等）
+- 配置修改即时生效（速度/睡眠）
+- 自动导出到 JSON 文件
+
+#PromptPal #Tauri #Vue3 #TypeScript #Rust

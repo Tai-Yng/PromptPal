@@ -58,17 +58,17 @@ export const useSettingsStore = defineStore('settings', () => {
     openai: {
       name: 'OpenAI',
       url: 'https://api.openai.com/v1/chat/completions',
-      models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo']
+      models: ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'o4-mini', 'o3-mini', 'gpt-4-turbo']
     },
     deepseek: {
       name: 'DeepSeek',
       url: 'https://api.deepseek.com/v1/chat/completions',
-      models: ['deepseek-chat', 'deepseek-coder']
+      models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder', 'deepseek-v4', 'deepseek-v3']
     },
     claude: {
       name: 'Claude',
       url: 'https://api.anthropic.com/v1/messages',
-      models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku']
+      models: ['claude-sonnet-4-20250514', 'claude-3.5-sonnet', 'claude-3.5-haiku', 'claude-3-opus']
     },
     custom: {
       name: 'Custom',

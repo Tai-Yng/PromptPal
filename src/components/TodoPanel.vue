@@ -15,11 +15,12 @@ const activeCatId = computed(() => isPlanView.value ? '' : viewMode.value as str
 
 const showList = computed(() => {
   if (isPlanView.value) return todoStore.planItems
-  return todoStore.itemsByCategory(viewMode.value as string)
+  // 分类视图：只显示未完成的
+  return todoStore.itemsByCategory(viewMode.value as string).filter(i => !i.done)
 })
 
 const showActive = computed(() => showList.value.filter(i => !i.done))
-const showDone = computed(() => showList.value.filter(i => i.done))
+const showDone = computed(() => isPlanView.value ? showList.value.filter(i => i.done) : [])
 
 const planCount = computed(() => todoStore.planActive.length)
 
@@ -44,8 +45,6 @@ const addTask = () => {
   const cat = isPlanView.value ? activeCat.value : (viewMode.value as string)
   todoStore.addItem(text, cat)
   newTaskText.value = ''
-  // 切换到对应分类查看
-  if (isPlanView.value) viewMode.value = cat
 }
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Enter') addTask()

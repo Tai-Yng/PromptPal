@@ -26,24 +26,38 @@ function loadPrompts() {
   return []
 }
 
-// Windows 剪贴板写入
+// 剪贴板写入（UTF-8 安全）
 function clipboardWrite(text) {
   if (process.platform === 'win32') {
     try {
-      execSync('clip', { input: text, encoding: 'utf-8' })
+      // PowerShell Set-Clipboard 正确处理 UTF-8
+      const escaped = text
+        .replace(/"/g, '`"')
+        .replace(/\$/g, '`$')
+        .replace(/`/g, '``')
+      execSync(`powershell -NoProfile -Command "$input = @'\\n${text}\\n'@; Set-Clipboard -Value $input"`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
       return true
-    } catch { return false }
+    } catch {
+      try {
+        // 降级：通过文件中转
+        const { writeFileSync, unlinkSync } = require('fs')
+        const { tmpdir } = require('os')
+        const tmp = require('path').join(tmpdir(), `pal_${Date.now()}.txt`)
+        writeFileSync(tmp, text, 'utf-8')
+        execSync(`powershell -NoProfile -Command "Get-Content '${tmp}' | Set-Clipboard"`, { encoding: 'utf-8' })
+        unlinkSync(tmp)
+        return true
+      } catch { return false }
+    }
   }
-  // Linux/macOS fallback
-  try {
-    execSync('pbcopy', { input: text, encoding: 'utf-8' })
-    return true
-  } catch {
-    try {
-      execSync('xclip -selection clipboard', { input: text, encoding: 'utf-8' })
-      return true
-    } catch { return false }
+  if (process.platform === 'darwin') {
+    try { execSync('pbcopy', { input: text, encoding: 'utf-8' }); return true } catch { return false }
   }
+  // Linux
+  try { execSync('xclip -selection clipboard', { input: text, encoding: 'utf-8' }); return true } catch { return false }
 }
 
 async function main() {

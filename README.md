@@ -124,7 +124,7 @@ npm run tauri build
 
 ## Known Limitations
 
-- **Custom sprite import** (pet image from PNG) is not yet functional. The settings panel shows the UI but sprite rendering is not implemented in the pet component.
+- Custom sprite import for the desktop pet is not yet supported.
 - Network search for prompts from external platforms is experimental.
 - Claude provider uses a different API format; generation may require adjustments.
 

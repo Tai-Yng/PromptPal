@@ -248,28 +248,6 @@ const testConnection = async () => {
   }
 }
 
-// 导入精灵图
-const handleSpriteImport = () => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/png'
-  input.onchange = () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      petStore.importSprite({
-        imageUrl: reader.result as string,
-        frameWidth: 32,
-        frameHeight: 32,
-        frames: 4
-      })
-    }
-    reader.readAsDataURL(file)
-  }
-  input.click()
-}
-
 const handleKeyDown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') { e.preventDefault(); emit('close') }
 }
@@ -455,20 +433,6 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
               />
               <span class="shape-val">{{ (petStore.currentStyle[s.k as keyof typeof petStore.currentStyle] as number).toFixed(1) }}</span>
             </div>
-          </div>
-        </div>
-
-        <!-- Sprite -->
-        <div class="cfg-row">
-          <span class="cfg-key">sprite</span>
-          <span class="cfg-op">=</span>
-          <div class="cfg-value">
-            <button class="opt-btn" @click="handleSpriteImport">
-              {{ petStore.useCustomSprite ? 'change sprite' : 'import png' }}
-            </button>
-            <button v-if="petStore.useCustomSprite" class="opt-btn del" @click="petStore.clearSprite()">
-              clear
-            </button>
           </div>
         </div>
 

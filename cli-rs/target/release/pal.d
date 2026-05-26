@@ -1,1 +1,0 @@
-C:\Users\lyer\AppData\Roaming\TRAE\ SOLO\ CN\ModularData\ai-agent\work-mode-projects\6a09d2c1a2819317bb379a64\PromptPal\cli-rs\target\release\pal.exe: C:\Users\lyer\AppData\Roaming\TRAE\ SOLO\ CN\ModularData\ai-agent\work-mode-projects\6a09d2c1a2819317bb379a64\PromptPal\cli-rs\src\main.rs

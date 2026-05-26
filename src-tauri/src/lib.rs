@@ -238,6 +238,37 @@ fn show_context_menu(app: tauri::AppHandle, x: i32, y: i32) -> Result<(), String
     Ok(())
 }
 
+/// 首次启动时将安装目录加入用户 PATH（使 pal 命令全局可用）
+#[cfg(target_os = "windows")]
+fn register_pal_path() {
+    use std::process::Command;
+    // 获取当前 exe 所在目录
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(dir) = exe_path.parent() {
+            let dir_str = dir.to_string_lossy().to_string();
+            // 用 PowerShell 操作注册表，安全可靠
+            let script = format!(
+                r#"
+$dir = '{}'
+$regPath = 'HKCU:\Environment'
+$current = [Environment]::GetEnvironmentVariable('Path', 'User') ?? ''
+$entries = $current -split ';' | Where-Object {{ $_ -ne '' }}
+if ($entries -notcontains $dir) {{
+    $new = $current + ';' + $dir
+    [Environment]::SetEnvironmentVariable('Path', $new, 'User')
+}}
+"#,
+                dir_str.replace('\'', "''")
+            );
+            let _ = Command::new("powershell")
+                .args(["-NoProfile", "-Command", &script])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -287,6 +318,10 @@ pub fn run() {
                 }
             }
         }
+
+        // 首次启动：注册安装目录到 PATH（使 pal 命令全局可用）
+        #[cfg(target_os = "windows")]
+        register_pal_path();
 
         // 面板窗口关闭时隐藏而不是退出
         if let Some(panel_win) = app.get_webview_window("panel") {

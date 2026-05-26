@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run build:cli",
     "preview": "vite preview",
     "tauri": "cargo tauri",
     "tauri:dev": "cargo tauri dev",
-    "tauri:build": "cargo tauri build"
+    "tauri:build": "cargo tauri build",
+    "build:cli": "node scripts/build-cli.cjs"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.7",

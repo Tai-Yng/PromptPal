@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -36,14 +36,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Install esbuild
+        run: npm install esbuild
+
       - name: Build Tauri app
         run: npm run tauri build
 
-      - name: Upload installer
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
             src-tauri/target/release/bundle/nsis/PromptPal_*.exe
             src-tauri/target/release/bundle/msi/PromptPal_*.msi
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

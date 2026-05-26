@@ -134,7 +134,7 @@ const setDefaultPrompt = (id: string) => {
 }
 
 const addToTodo = (p: any) => {
-  todoStore.addItem(p.title, p.title)
+  todoStore.addItem(p.title, 'work', p.title)
 }
 </script>
 

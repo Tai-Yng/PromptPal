@@ -41,9 +41,10 @@ const activeCat = ref('work')
 const addTask = () => {
   const text = newTaskText.value.trim()
   if (!text) return
-  // 在分类视图时自动使用当前分类
   const cat = isPlanView.value ? activeCat.value : (viewMode.value as string)
-  todoStore.addItem(text, cat)
+  const item = todoStore.addItem(text, cat)
+  // plan 视图下直接加入计划
+  if (isPlanView.value && item) todoStore.togglePlan(item.id)
   newTaskText.value = ''
 }
 const handleKeydown = (e: KeyboardEvent) => {
@@ -222,11 +223,13 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
     <div class="todo-list">
       <!-- Active -->
       <div v-for="item in showActive" :key="item.id" class="todo-item">
-        <button class="plan-btn" :class="{ on: item.inPlan }"
+        <button
+          class="plan-btn"
+          :class="{ on: item.inPlan }"
           :title="item.inPlan ? 'remove from plan' : 'add to plan'"
           @click="todoStore.togglePlan(item.id)"
         >
-          {{ item.inPlan ? '●' : '○' }}
+          {{ item.inPlan ? '−plan' : '+plan' }}
         </button>
         <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }" :title="item.category"></span>
         <button class="check-btn" title="done" @click="todoStore.toggleItem(item.id)">☐</button>
@@ -241,7 +244,6 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
           <button class="clear-done-btn" @click="clearDone">clear all</button>
         </div>
         <div v-for="item in showDone" :key="item.id" class="todo-item done">
-          <span class="plan-btn off"></span>
           <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }"></span>
           <button class="check-btn done" title="undo" @click="todoStore.toggleItem(item.id)">☑</button>
           <span class="todo-text" @click="todoStore.toggleItem(item.id)">{{ item.text }}</span>
@@ -385,13 +387,19 @@ const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id
 .todo-item:hover { background: var(--bg-secondary); }
 .todo-item.done { opacity: 0.45; }
 .plan-btn {
-  background: none; border: none; color: var(--text-muted);
-  font-size: 12px; cursor: pointer; padding: 0; flex-shrink: 0;
-  transition: color var(--transition-fast); line-height: 1;
+  background: transparent; border: 1px solid var(--border-color);
+  color: var(--text-muted); border-radius: var(--radius-sm);
+  font-size: 9px; font-family: var(--font-mono);
+  cursor: pointer; padding: 2px 5px; flex-shrink: 0;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
 }
-.plan-btn:hover { color: var(--primary); }
-.plan-btn.on { color: var(--primary); }
-.plan-btn.off { visibility: hidden; }
+.plan-btn:hover { border-color: var(--primary); color: var(--primary); }
+.plan-btn.on {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+}
 .cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .check-btn {
   background: none; border: none; color: var(--primary);

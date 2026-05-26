@@ -3,6 +3,30 @@ import { ref, computed } from 'vue'
 import type { Prompt, Category } from '../types'
 import { copyToClipboard as platformCopy } from '../services/platform'
 
+// 防抖自动导出到文件
+let autoExportTimer: number | null = null
+const autoExport = () => {
+  if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+    if (autoExportTimer) clearTimeout(autoExportTimer)
+    autoExportTimer = window.setTimeout(async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const prompts = localStorage.getItem('promptpal_prompts') || '[]'
+        const categories = localStorage.getItem('promptpal_categories') || '[]'
+        const aiConfig = localStorage.getItem('promptpal_ai_config') || '{}'
+        const petConfig = localStorage.getItem('promptpal_pet_config') || '{}'
+        const petStyle = localStorage.getItem('promptpal_pet_style') || '{}'
+        await invoke('sync_save', {
+          data: JSON.stringify({
+            prompts, categories, aiConfig, petConfig, petStyle,
+            exportedAt: new Date().toISOString()
+          })
+        })
+      } catch { /* ignore */ }
+    }, 2000)
+  }
+}
+
 export const usePromptStore = defineStore('prompt', () => {
   // 状态
   const prompts = ref<Prompt[]>([])
@@ -142,6 +166,7 @@ export const usePromptStore = defineStore('prompt', () => {
     localStorage.setItem('promptpal_prompts', JSON.stringify(prompts.value))
     localStorage.setItem('promptpal_categories', JSON.stringify(categories.value))
     localStorage.setItem('promptpal_default_prompt_id', defaultPromptId.value || '')
+    autoExport()
   }
 
   const loadFromLocalStorage = () => {

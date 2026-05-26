@@ -1,0 +1,11 @@
+{
+  "name": "pal",
+  "version": "1.0.0",
+  "description": "PromptPal CLI - select and copy prompts from terminal",
+  "bin": {
+    "pal": "./bin/pal.js"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.0.0"
+  }
+}

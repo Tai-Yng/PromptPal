@@ -2,6 +2,147 @@ use tauri::Manager;
 use tauri::PhysicalPosition;
 use tauri::WebviewWindowBuilder;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+/// 获取当前活跃窗口标题（Windows only）
+#[tauri::command]
+fn get_active_window_title() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
+        let hwnd = unsafe { GetForegroundWindow() };
+        if hwnd.is_invalid() {
+            return Ok(String::new());
+        }
+        let mut buffer = [0u16; 512];
+        let len = unsafe { GetWindowTextW(hwnd, &mut buffer) };
+        if len > 0 {
+            Ok(String::from_utf16_lossy(&buffer[..len as usize]))
+        } else {
+            Ok(String::new())
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(String::new())
+    }
+}
+
+/// 同步数据：保存 JSON 到本地文件
+#[tauri::command]
+fn sync_save(data: String) -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let dir = home.join(".promptpal");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    let path = dir.join("promptpal_data.json");
+    std::fs::write(&path, &data).map_err(|e| format!("Failed to write: {}", e))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// 同步数据：从本地文件加载 JSON
+#[tauri::command]
+fn sync_load() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let path = home.join(".promptpal").join("promptpal_data.json");
+    if path.exists() {
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read: {}", e))
+    } else {
+        Ok(String::new())
+    }
+}
+
+/// Gitee API: 检查连接
+#[tauri::command]
+fn gitee_verify(token: String, owner: String, repo: String) -> Result<String, String> {
+    let url = format!("https://gitee.com/api/v5/repos/{}/{}", owner, repo);
+    let resp = ureq::get(&url)
+        .set("Authorization", &format!("token {}", token))
+        .call()
+        .map_err(|e| format!("http error: {}", e))?;
+    let status = resp.status();
+    if status == 200 {
+        let body = resp.into_string().unwrap_or_default();
+        let full_name = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v["full_name"].as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| format!("{}/{}", owner, repo));
+        Ok(format!("[OK] connected to {}", full_name))
+    } else if status == 404 {
+        Err("repo not found — check owner/repo spelling".into())
+    } else if status == 401 {
+        Err("bad token".into())
+    } else {
+        Err(format!("http status {}", status))
+    }
+}
+
+/// Gitee API: 推送到仓库
+#[tauri::command]
+fn gitee_push(token: String, owner: String, repo: String, path: String, content: String) -> Result<String, String> {
+    let base = format!("https://gitee.com/api/v5/repos/{}/{}/contents/{}", owner, repo, path);
+    let body = serde_json::json!({
+        "content": content,
+        "message": "sync from PromptPal",
+    });
+
+    // 先查文件是否存在（获取 sha）
+    let mut sha = String::new();
+    let check_url = &base;
+    if let Ok(resp) = ureq::get(check_url)
+        .set("Authorization", &format!("token {}", token))
+        .call() {
+        if resp.status() == 200 {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp.into_string().unwrap_or_default()) {
+                sha = json["sha"].as_str().unwrap_or("").to_string();
+            }
+        }
+    }
+
+    let agent = ureq::Agent::new();
+    let req = if sha.is_empty() {
+        agent.post(&base)
+    } else {
+        agent.put(&base)
+    };
+
+    let mut body_val = body.clone();
+    if !sha.is_empty() {
+        body_val["sha"] = serde_json::Value::String(sha);
+    }
+
+    let resp = req
+        .set("Content-Type", "application/json")
+        .set("Authorization", &format!("token {}", token))
+        .send_string(&serde_json::to_string(&body_val).unwrap_or_default())
+        .map_err(|e| format!("http error: {}", e))?;
+
+    if resp.status() == 200 || resp.status() == 201 {
+        Ok(format!("[OK] pushed to {}/{}/{}", owner, repo, path))
+    } else {
+        let status = resp.status();
+        let err = resp.into_string().unwrap_or_default();
+        Err(format!("{}: {}", status, err))
+    }
+}
+
+/// Gitee API: 从仓库拉取
+#[tauri::command]
+fn gitee_pull(token: String, owner: String, repo: String, path: String) -> Result<String, String> {
+    let url = format!("https://gitee.com/api/v5/repos/{}/{}/contents/{}", owner, repo, path);
+    let resp = ureq::get(&url)
+        .set("Authorization", &format!("token {}", token))
+        .call()
+        .map_err(|e| format!("http error: {}", e))?;
+    let status = resp.status();
+    if status == 200 {
+        let json_str = resp.into_string().unwrap_or_default();
+        Ok(json_str)
+    } else if status == 404 {
+        Err("file not found in repo — push first".into())
+    } else {
+        Err(format!("http status {}", status))
+    }
+}
 
 /// 显示面板窗口
 #[tauri::command]
@@ -24,6 +165,39 @@ fn hide_panel(app: tauri::AppHandle) -> Result<(), String> {
     } else {
         Err("Panel window not found".into())
     }
+}
+
+/// 创建或显示快速注入窗口
+fn create_quick_inject(app: &tauri::AppHandle) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window("quick-inject") {
+        let _ = existing.close();
+    }
+
+    let _webview = WebviewWindowBuilder::new(
+        app,
+        "quick-inject",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("PromptPal")
+    .inner_size(380.0, 440.0)
+    .resizable(false)
+    .decorations(true)
+    .center()
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .build()
+    .map_err(|e| format!("Failed to create quick-inject window: {}", e))?;
+
+    Ok(())
+}
+
+/// 快捷注入复制后关闭窗口
+#[tauri::command]
+fn quick_inject_done(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("quick-inject") {
+        let _ = window.close();
+    }
+    Ok(())
 }
 
 /// 显示浮动右键菜单窗口
@@ -61,7 +235,19 @@ pub fn run() {
     tauri::Builder::default()
     .plugin(tauri_plugin_clipboard_manager::init())
     .plugin(tauri_plugin_shell::init())
-    .invoke_handler(tauri::generate_handler![show_panel, hide_panel, show_context_menu])
+    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    .invoke_handler(tauri::generate_handler![
+        show_panel,
+        hide_panel,
+        get_active_window_title,
+        quick_inject_done,
+        show_context_menu,
+        sync_save,
+        sync_load,
+        gitee_verify,
+        gitee_push,
+        gitee_pull
+    ])
     .setup(|app| {
         // 日志
         app.handle().plugin(
@@ -69,6 +255,14 @@ pub fn run() {
             .level(log::LevelFilter::Info)
             .build(),
         )?;
+
+        // 注册全局热键 Alt+Space → 打开快速注入窗口
+        let handle = app.handle().clone();
+        app.handle().global_shortcut().on_shortcut("Ctrl+Alt+P", move |_app, _shortcut, event| {
+            if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                let _ = create_quick_inject(&handle);
+            }
+        })?;
 
         // Pet 窗口定位到右下角
         if let Some(pet_win) = app.get_webview_window("pet") {

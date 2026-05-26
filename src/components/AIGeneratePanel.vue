@@ -14,6 +14,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 }
 onMounted(() => { window.addEventListener('keydown', handleKeyDown) })
 onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
+
 const mode = ref<'generate' | 'optimize'>('generate')
 const input = ref('')
 const result = ref('')
@@ -24,57 +25,49 @@ const isReady = computed(() => store.isConfigured && input.value.trim().length >
 
 const handleGenerate = async () => {
   if (!isReady.value) return
-
-  isGenerating.value = true
-  error.value = ''
-  result.value = ''
-
+  isGenerating.value = true; error.value = ''; result.value = ''
   try {
-    const generated = await store.generatePrompt(input.value, mode.value)
+    const generated = await store.generatePromptStream(input.value, mode.value, (token) => {
+      result.value += token
+    })
     result.value = generated
   } catch (err: any) {
-    error.value = err.message || 'Failed to generate'
+    error.value = err.message || 'generation failed'
   } finally {
     isGenerating.value = false
   }
 }
 
-const handleApply = () => {
-  if (result.value) {
-    emit('apply', result.value)
-  }
-}
-
-const handleClose = () => {
-  emit('close')
-}
+const handleApply = () => { if (result.value) emit('apply', result.value) }
 </script>
 
 <template>
-  <div class="panel-overlay" @click.self="handleClose">
+  <div class="panel-overlay" @click.self="emit('close')">
     <div class="ai-modal">
       <!-- 标题栏 -->
       <div class="ai-titlebar">
         <div class="titlebar-dots">
-          <span class="dot close" @click="handleClose"></span>
+          <span class="dot close" @click="emit('close')"></span>
           <span class="dot"></span>
           <span class="dot"></span>
         </div>
-      <span class="titlebar-text">
-        <span class="title-icon">✨</span> AI Generate
-      </span>
-      <div class="titlebar-spacer"></div>
+        <span class="titlebar-text">
+          <span class="title-path">ai-gen</span>
+          <span class="title-sep">::</span>
+          <span class="title-file">~/generate</span>
+        </span>
+        <div class="titlebar-spacer"></div>
       </div>
 
-      <!-- 未配置提示 -->
+      <!-- 未配置 -->
       <div v-if="!store.isConfigured" class="not-configured">
-        <span class="nc-icon">⚠️</span>
-        <p>AI not configured</p>
-        <p class="nc-hint">Please configure API settings first</p>
-        <button class="nc-btn" @click="$emit('close'); $emit('settings')">Open Settings</button>
+        <span class="nc-msg">[error] AI not configured</span>
+        <p class="nc-hint">configure API settings first</p>
+        <button class="nc-btn" @click="$emit('close'); $emit('settings')">
+          $ settings
+        </button>
       </div>
 
-      <!-- 主内容 -->
       <template v-else>
         <!-- 模式选择 -->
         <div class="mode-tabs">
@@ -83,26 +76,29 @@ const handleClose = () => {
             :class="{ active: mode === 'generate' }"
             @click="mode = 'generate'"
           >
-            <span class="tab-icon">✨</span> Generate
+            <span class="tab-tag">&lt;gen&gt;</span> generate
           </button>
           <button
             class="mode-tab"
             :class="{ active: mode === 'optimize' }"
             @click="mode = 'optimize'"
           >
-            <span class="tab-icon">🔧</span> Optimize
+            <span class="tab-tag">&lt;opt&gt;</span> optimize
           </button>
         </div>
 
         <!-- 输入区 -->
         <div class="input-section">
           <label class="input-label">
-            {{ mode === 'generate' ? 'Describe what you need:' : 'Paste your prompt:' }}
+            <span class="label-key">{{ mode === 'generate' ? 'describe' : 'input' }}</span>
+            <span class="label-colon">:</span>
           </label>
           <textarea
             v-model="input"
             class="input-textarea"
-            :placeholder="mode === 'generate' ? 'e.g., A professional coding assistant for Python...' : 'Paste your current prompt here...'"
+            :placeholder="mode === 'generate'
+              ? 'describe what you need...'
+              : 'paste your prompt here...'"
             rows="4"
           ></textarea>
         </div>
@@ -114,21 +110,23 @@ const handleClose = () => {
           @click="handleGenerate"
         >
           <span v-if="isGenerating" class="btn-spinner"></span>
-          <span v-else class="btn-icon">⚡</span>
-          <span>{{ isGenerating ? 'Generating...' : (mode === 'generate' ? 'Generate Prompt' : 'Optimize Prompt') }}</span>
+          <span v-else class="btn-sym">$</span>
+          <span>{{ isGenerating
+            ? 'generating...'
+            : `ai ${mode} --model=${store.aiConfig.model}` }}</span>
         </button>
 
-        <!-- 错误提示 -->
+        <!-- 错误 -->
         <div v-if="error" class="error-msg">
-          <span class="error-icon">❌</span> {{ error }}
+          <span class="error-prefix">[ERR]</span> {{ error }}
         </div>
 
         <!-- 结果区 -->
         <div v-if="result" class="result-section">
           <div class="result-header">
-            <span class="result-label">Result:</span>
+            <span class="result-label">stdout ::</span>
             <button class="apply-btn" @click="handleApply">
-              <span>Apply →</span>
+              apply &gt;
             </button>
           </div>
           <pre class="result-content">{{ result }}</pre>
@@ -138,7 +136,7 @@ const handleClose = () => {
       <!-- 底部 -->
       <div class="ai-footer">
         <span class="footer-hint">
-          <span class="hint-key">esc</span> to close
+          <span class="hint-key">esc</span> close
         </span>
         <span class="provider-badge">
           {{ store.providerPresets[store.aiConfig.provider].name }}
@@ -149,308 +147,212 @@ const handleClose = () => {
 </template>
 
 <style scoped>
-/* 遮罩层 */
 .panel-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10003;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: fixed; inset: 0; z-index: 10003;
+  display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
 }
 
 .ai-modal {
-  width: 90%;
+  width: 92%; max-width: 560px;
   background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-active);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), 0 0 30px rgba(99, 102, 241, 0.1);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
 }
 
-/* 标题栏 */
+/* ── Titlebar ── */
 .ai-titlebar {
-  display: flex;
-  align-items: center;
+  display: flex; align-items: center;
   padding: 10px 14px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
 }
-
-.titlebar-dots {
-  display: flex;
-  gap: 6px;
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
+.titlebar-dots { display: flex; gap: 7px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; }
 .dot.close { background: #EF4444; cursor: pointer; }
-.dot.close:hover { background: #F87171; }
+.dot.close:hover { background: #F87171; box-shadow: 0 0 6px rgba(239, 68, 68, 0.4); }
 .dot:not(.close) { background: var(--text-muted); }
-
 .titlebar-text {
-  flex: 1;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-secondary);
+  flex: 1; text-align: center;
+  font-family: var(--font-mono); font-size: 11px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
 }
+.title-path { color: var(--accent); }
+.title-sep { color: var(--text-muted); }
+.title-file { color: var(--text-secondary); }
+.titlebar-spacer { width: 57px; }
 
-.title-icon {
-  color: var(--primary-color);
-  margin-right: 6px;
-}
-
-.titlebar-spacer { width: 52px; }
-
-/* 未配置提示 */
+/* ── Not Configured ── */
 .not-configured {
-  padding: 40px;
-  text-align: center;
-  color: var(--text-secondary);
+  padding: 40px; text-align: center;
+  font-family: var(--font-mono);
 }
-
-.nc-icon { font-size: 32px; margin-bottom: 12px; }
-.not-configured p { margin-bottom: 4px; }
-.nc-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
-
+.nc-msg { font-size: 13px; color: var(--warning); display: block; margin-bottom: 8px; }
+.nc-hint { font-size: 11px; color: var(--text-muted); margin-bottom: 16px; }
 .nc-btn {
-  padding: 8px 20px;
-  border: 1px solid var(--primary-color);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px;
+  border: 1px solid var(--primary);
   background: transparent;
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--primary-color);
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--primary-light);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-normal);
 }
+.nc-btn:hover { background: var(--primary); color: #fff; }
 
-.nc-btn:hover {
-  background: var(--primary-color);
-  color: var(--bg-primary);
-}
-
-/* 模式选择 */
+/* ── Mode Tabs ── */
 .mode-tabs {
-  display: flex;
-  padding: 12px 16px 0;
-  gap: 8px;
+  display: flex; padding: 12px 16px 0; gap: 8px;
 }
-
 .mode-tab {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
   padding: 10px;
   border: 1px solid var(--border-color);
   background: transparent;
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-mono); font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-normal);
 }
-
-.mode-tab:hover {
-  border-color: var(--text-muted);
-  color: var(--text-secondary);
-}
-
+.mode-tab:hover { border-color: var(--text-muted); color: var(--text-secondary); }
 .mode-tab.active {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-  background: rgba(0, 212, 170, 0.08);
+  border-color: var(--primary);
+  color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.08);
 }
+.tab-tag { font-size: 10px; opacity: 0.7; font-weight: 600; }
 
-.tab-icon { font-size: 13px; }
-
-/* 输入区 */
-.input-section {
-  padding: 16px;
-}
-
+/* ── Input ── */
+.input-section { padding: 16px; }
 .input-label {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-secondary);
+  display: flex; align-items: center; gap: 2px;
   margin-bottom: 8px;
+  font-family: var(--font-mono); font-size: 11px;
 }
-
+.label-key { color: var(--accent); font-weight: 600; }
+.label-colon { color: var(--text-muted); }
 .input-textarea {
-  width: 100%;
-  padding: 12px;
+  width: 100%; padding: 10px 12px;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-family: var(--font-mono); font-size: 12px;
   color: var(--text-primary);
-  resize: vertical;
-  min-height: 100px;
+  resize: vertical; min-height: 90px;
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: all var(--transition-normal);
 }
+.input-textarea:focus { border-color: var(--primary); box-shadow: var(--glow-sm); }
+.input-textarea::placeholder { color: var(--text-muted); font-style: italic; opacity: 0.5; }
 
-.input-textarea:focus {
-  border-color: var(--primary-color);
-  box-shadow: var(--glow-sm);
-}
-
-.input-textarea::placeholder { color: var(--text-muted); }
-
-/* 生成按钮 */
+/* ── Generate Button ── */
 .generate-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 0 16px 16px;
-  padding: 12px;
-  border: 1px solid var(--primary-color);
-  background: var(--primary-color);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 16px 16px; padding: 10px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--bg-primary);
+  font-family: var(--font-mono); font-size: 12px;
+  color: #fff;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-normal);
 }
-
 .generate-btn:hover:not(:disabled) {
   background: var(--primary-light);
   border-color: var(--primary-light);
+  box-shadow: var(--glow-md);
 }
-
-.generate-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
+.generate-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-sym { font-size: 12px; opacity: 0.7; }
 .btn-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(0, 0, 0, 0.3);
-  border-top-color: var(--bg-primary);
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
 
-.btn-icon { font-size: 14px; }
-
-/* 错误提示 */
+/* ── Error ── */
 .error-msg {
-  margin: 0 16px 16px;
-  padding: 10px 12px;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  margin: 0 16px 16px; padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--error-color);
+  font-family: var(--font-mono); font-size: 11px;
+  color: #FCA5A5;
 }
+.error-prefix { font-weight: 700; }
 
-.error-icon { margin-right: 6px; }
-
-/* 结果区 */
+/* ── Result ── */
 .result-section {
   margin: 0 16px 16px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
-
 .result-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-}
-
-.result-label {
   font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
 }
-
+.result-label { font-size: 11px; color: var(--terminal-green); }
 .apply-btn {
-  padding: 4px 12px;
-  border: 1px solid var(--success-color);
+  padding: 4px 10px;
+  border: 1px solid var(--terminal-green);
   background: transparent;
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--success-color);
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--terminal-green);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
-
-.apply-btn:hover {
-  background: var(--success-color);
-  color: var(--bg-primary);
-}
-
+.apply-btn:hover { background: var(--terminal-green); color: var(--bg-primary); }
 .result-content {
-  padding: 12px;
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
+  padding: 12px; margin: 0;
+  font-family: var(--font-mono); font-size: 12px;
   color: var(--text-primary);
   line-height: 1.6;
   background: var(--bg-input);
   white-space: pre-wrap;
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
 }
 
-/* 底部 */
+/* ── Footer ── */
 .ai-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
 }
-
 .footer-hint {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);
 }
-
 .hint-key {
   padding: 1px 6px;
   border: 1px solid var(--border-color);
-  border-radius: 3px;
-  font-size: 10px;
+  border-radius: 2px;
+  font-size: 9px;
 }
-
 .provider-badge {
   padding: 2px 10px;
-  background: rgba(0, 212, 170, 0.1);
-  border: 1px solid rgba(0, 212, 170, 0.3);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--primary-color);
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--primary-light);
+  letter-spacing: 0.5px;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

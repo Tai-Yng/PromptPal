@@ -2,7 +2,11 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "PromptPal capabilities",
-  "windows": ["pet", "panel", "context-menu"],
+  "windows": [
+    "pet",
+    "panel",
+    "context-menu"
+  ],
   "permissions": [
     "core:default",
     "core:window:default",

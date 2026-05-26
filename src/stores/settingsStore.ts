@@ -10,6 +10,15 @@ export interface AIConfig {
   model: string
 }
 
+// 快捷方式类型
+export interface Shortcut {
+  id: string
+  icon: string
+  label: string
+  type: 'app' | 'hotkey' | 'command'
+  action: string
+}
+
 export const useSettingsStore = defineStore('settings', () => {
   // AI配置
   const aiConfig = ref<AIConfig>({
@@ -21,9 +30,27 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // 桌宠配置
   const petConfig = ref({
-    sleepTimeout: 120, // 休眠时间(秒)
-    walkSpeed: 0.3,    // 走动速度 (0.1-1.0)
-    dblClickCopy: true // 双击桌宠复制默认提示词（默认开启）
+    sleepTimeout: 120,
+    walkSpeed: 0.3,
+    dblClickCopy: true,
+    contextAware: true
+  })
+
+  // 快捷方式配置
+  const shortcuts = ref<Shortcut[]>([
+    { id: '1', icon: '🌐', label: '浏览器', type: 'app', action: 'https://www.google.com' },
+    { id: '2', icon: '📁', label: '文件', type: 'app', action: 'explorer' },
+    { id: '3', icon: '🔒', label: '锁屏', type: 'hotkey', action: 'win+l' },
+    { id: '4', icon: '📋', label: '复制', type: 'hotkey', action: 'ctrl+c' },
+  ])
+
+  // Gitee 同步配置
+  const giteeConfig = ref({
+    token: '',
+    owner: '',
+    repo: '',
+    path: 'promptpal_data.json',
+    enabled: false
   })
 
   // 预设配置
@@ -76,6 +103,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const saveToStorage = () => {
     localStorage.setItem('promptpal_ai_config', JSON.stringify(aiConfig.value))
     localStorage.setItem('promptpal_pet_config', JSON.stringify(petConfig.value))
+    localStorage.setItem('promptpal_shortcuts', JSON.stringify(shortcuts.value))
+    localStorage.setItem('promptpal_gitee_config', JSON.stringify(giteeConfig.value))
   }
 
   // 从本地存储加载
@@ -94,6 +123,39 @@ export const useSettingsStore = defineStore('settings', () => {
         petConfig.value = { ...petConfig.value, ...parsed }
       } catch {}
     }
+    const savedShortcuts = localStorage.getItem('promptpal_shortcuts')
+    if (savedShortcuts) {
+      try {
+        shortcuts.value = JSON.parse(savedShortcuts)
+      } catch {}
+    }
+    const savedGitee = localStorage.getItem('promptpal_gitee_config')
+    if (savedGitee) {
+      try {
+        giteeConfig.value = { ...giteeConfig.value, ...JSON.parse(savedGitee) }
+      } catch {}
+    }
+  }
+
+  // 快捷方式 CRUD
+  const addShortcut = (shortcut: Omit<Shortcut, 'id'>) => {
+    const newShortcut: Shortcut = { ...shortcut, id: crypto.randomUUID() }
+    shortcuts.value.push(newShortcut)
+    saveToStorage()
+    return newShortcut
+  }
+
+  const updateShortcut = (id: string, updates: Partial<Shortcut>) => {
+    const index = shortcuts.value.findIndex(s => s.id === id)
+    if (index !== -1) {
+      shortcuts.value[index] = { ...shortcuts.value[index], ...updates }
+      saveToStorage()
+    }
+  }
+
+  const deleteShortcut = (id: string) => {
+    shortcuts.value = shortcuts.value.filter(s => s.id !== id)
+    saveToStorage()
   }
 
   // AI生成Prompt
@@ -167,9 +229,113 @@ export const useSettingsStore = defineStore('settings', () => {
   // 初始化
   loadFromStorage()
 
+  // SSE流式生成Prompt
+  const generatePromptStream = async (
+    input: string,
+    mode: 'generate' | 'optimize',
+    onToken: (token: string) => void
+  ): Promise<string> => {
+    if (!isConfigured.value) {
+      throw new Error('AI not configured')
+    }
+
+    const config = aiConfig.value
+
+    const systemPrompt = mode === 'generate'
+      ? 'You are a prompt engineering expert. Generate a high-quality, detailed prompt based on the user\'s request. The prompt should be clear, specific, and optimized for AI tools like ChatGPT, Midjourney, or Claude.'
+      : 'You are a prompt engineering expert. Optimize and improve the user\'s prompt to make it more effective, clear, and detailed. Fix any issues and enhance the prompt quality.'
+
+    const userPrompt = mode === 'generate'
+      ? `Generate a professional prompt for: ${input}`
+      : `Optimize this prompt:\n\n${input}`
+
+    let requestBody: any
+    let headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    }
+
+    if (config.provider === 'claude') {
+      headers['x-api-key'] = config.apiKey
+      headers['anthropic-version'] = '2023-06-01'
+      requestBody = {
+        model: config.model,
+        max_tokens: 2000,
+        stream: true,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      }
+    } else {
+      headers['Authorization'] = `Bearer ${config.apiKey}`
+      requestBody = {
+        model: config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000,
+        stream: true
+      }
+    }
+
+    const response = await fetch(config.apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`API error: ${error}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No response body')
+
+    const decoder = new TextDecoder()
+    let fullResponse = ''
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+        if (trimmed === 'data: [DONE]') continue
+
+        try {
+          const json = JSON.parse(trimmed.slice(6))
+          let token = ''
+          if (config.provider === 'claude') {
+            token = json.delta?.text || json.type === 'content_block_delta' ? json.delta?.text : ''
+          } else {
+            token = json.choices?.[0]?.delta?.content || ''
+          }
+          if (token) {
+            fullResponse += token
+            onToken(token)
+          }
+        } catch {
+          // 跳过非JSON行
+        }
+      }
+    }
+
+    return fullResponse
+  }
+
   return {
     aiConfig,
     petConfig,
+    shortcuts,
     providerPresets,
     isConfigured,
     setProvider,
@@ -178,6 +344,17 @@ export const useSettingsStore = defineStore('settings', () => {
       petConfig.value = { ...petConfig.value, ...config }
       saveToStorage()
     },
-    generatePrompt
+    updateGiteeConfig: (config: Partial<typeof giteeConfig.value>) => {
+      giteeConfig.value = { ...giteeConfig.value, ...config }
+      saveToStorage()
+    },
+    giteeConfig,
+    saveToStorage,
+    loadFromStorage,
+    addShortcut,
+    updateShortcut,
+    deleteShortcut,
+    generatePrompt,
+    generatePromptStream
   }
 })

@@ -99,3 +99,8 @@ export async function openExternal(url: string): Promise<void> {
     window.open(url, '_blank')
   }
 }
+
+// 别名 - 与 openExternal 相同功能
+export async function openUrl(url: string): Promise<void> {
+  return openExternal(url)
+}

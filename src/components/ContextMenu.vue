@@ -152,14 +152,15 @@ html, body, #app { background: transparent !important; }
 
 .menu-container {
   min-width: 200px;
-  background: rgba(15, 23, 42, 0.97);
+  background: rgba(9, 9, 11, 0.98);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 212, 170, 0.25);
-  border-radius: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 12px;
   padding: 8px;
   box-shadow:
     0 8px 40px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 0 20px rgba(99, 102, 241, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
   outline: none;
   pointer-events: auto;
   animation: menu-in 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -185,8 +186,9 @@ html, body, #app { background: transparent !important; }
 
 .menu-title {
   font-size: 13px;
-  font-weight: 500;
-  color: #00D4AA;
+  font-weight: 600;
+  color: #818CF8;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   letter-spacing: 0.5px;
 }
 
@@ -204,23 +206,23 @@ html, body, #app { background: transparent !important; }
   padding: 10px 12px;
   background: none;
   border: none;
-  border-radius: 10px;
-  color: #CBD5E1;
+  border-radius: 8px;
+  color: #A1A1AA;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: all 0.12s ease;
-  font-family: inherit;
+  transition: all 0.15s ease;
+  font-family: 'JetBrains Mono', 'Microsoft YaHei', sans-serif;
 }
 
 .menu-item.active,
 .menu-item:hover {
-  background: rgba(0, 212, 170, 0.12);
-  color: #00F5C8;
+  background: rgba(99, 102, 241, 0.12);
+  color: #818CF8;
 }
 
 .menu-item:active {
-  background: rgba(0, 212, 170, 0.2);
+  background: rgba(99, 102, 241, 0.18);
   transform: scale(0.98);
 }
 

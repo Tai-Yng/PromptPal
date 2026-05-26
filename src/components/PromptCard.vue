@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { Prompt } from '../types'
 
 const props = defineProps<{
   prompt: Prompt
   isCopied?: boolean
   isDefault?: boolean
+  isExpanded?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -14,43 +15,140 @@ const emit = defineEmits<{
   (e: 'delete'): void
   (e: 'favorite'): void
   (e: 'set-default'): void
+  (e: 'expand'): void
 }>()
 
+const flashCopied = ref(false)
+const isHovered = ref(false)
+const isFocused = ref(false)
+
 const truncated = computed(() => {
-  if (props.prompt.content.length > 120) {
-    return props.prompt.content.slice(0, 120) + '...'
+  if (props.prompt.content.length > 150) {
+    return props.prompt.content.slice(0, 150) + '...'
   }
   return props.prompt.content
 })
 
-const catColors: Record<string, string> = {
-  chat: '#3B82F6',
-  image: '#A855F7',
-  code: '#22C55E',
-  writing: '#F59E0B',
-  other: '#64748B'
+const hasVariables = computed(() => {
+  return props.prompt.content.includes('{{') && props.prompt.content.includes('}}')
+})
+
+const showExpandButton = computed(() => {
+  return props.prompt.content.length > 150
+})
+
+const handleClick = () => {
+  if (!props.isExpanded) {
+    emit('expand')
+  }
 }
 
-const catColor = computed(() => catColors[props.prompt.category] || '#64748B')
+const handleCopy = (e: MouseEvent) => {
+  e.stopPropagation()
+  emit('copy')
+}
+
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && !props.isExpanded) {
+    e.preventDefault()
+    emit('expand')
+  } else if (e.key === 'Enter' && props.isExpanded) {
+    e.preventDefault()
+    emit('copy')
+  } else if (e.key === ' ' && !props.isExpanded) {
+    e.preventDefault()
+    emit('expand')
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
+
+const catColors: Record<string, string> = {
+  chat: '#818CF8',
+  image: '#A78BFA',
+  code: '#22D3EE',
+  writing: '#F59E0B',
+  other: '#6B7280'
+}
+
+const catColor = computed(() => catColors[props.prompt.category] || '#6B7280')
+
+// 变量提取
+const extractedVariables = computed(() => {
+  const vars = new Set<string>()
+  const regex = /\{\{(\w+)\}\}/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(props.prompt.content)) !== null) {
+    vars.add(match[1])
+  }
+  return Array.from(vars)
+})
+
+const displayContent = computed(() => {
+  if (props.isExpanded) return props.prompt.content
+  return truncated.value
+})
 </script>
 
 <template>
-  <div class="prompt-row" :class="{ copied: isCopied, 'is-default': isDefault }">
-    <!-- 行号 + 来源标记 -->
+  <div 
+    class="prompt-row" 
+    :class="{ 
+      copied: isCopied, 
+      'is-default': isDefault,
+      'is-expanded': isExpanded,
+      'has-variables': hasVariables
+    }"
+    @click="handleClick"
+    @mouseenter="isHovered = true"
+    @mouseleave="isHovered = false"
+    @focus="isFocused = true"
+    @blur="isFocused = false"
+    tabindex="0"
+    role="button"
+    :aria-label="isExpanded ? '点击复制提示词' : '点击展开查看完整提示词'"
+  >
+    <!-- 行号槽 -->
     <div class="row-gutter">
-      <span class="line-no" :style="{ color: catColor }">●</span>
+      <span class="line-dot" :style="{ background: catColor }"></span>
+      <span v-if="hasVariables" class="variable-indicator" title="包含变量">var</span>
     </div>
 
     <!-- 主内容 -->
-    <div class="row-content" @click="emit('copy')">
+    <div class="row-content">
       <div class="row-header">
+        <span class="row-prompt">&gt;</span>
         <span class="row-title">{{ prompt.title }}</span>
-        <span v-if="isDefault" class="default-badge">DEFAULT</span>
-        <span v-if="prompt.favorite" class="star">★</span>
+        <span v-if="isDefault" class="default-badge">[DEFAULT]</span>
+        <span v-if="prompt.favorite" class="fav-mark">*</span>
+        <span v-if="hasVariables" class="variable-badge" title="包含变量模板">
+          <span class="variable-bracket">{{ '{' }}{{ '{' }}</span>var<span class="variable-bracket">{{ '}' }}{{ '}' }}</span>
+        </span>
       </div>
-      <pre class="row-body">{{ truncated }}</pre>
+      
+      <!-- 变量提示 -->
+      <div v-if="hasVariables && !isExpanded" class="variable-hint">
+        <span class="hint-text">包含 {{ extractedVariables.length }} 个变量</span>
+        <span class="hint-vars">{{ extractedVariables.join(', ') }}</span>
+      </div>
+      
+      <div class="row-body">
+        <code class="body-code">{{ displayContent }}</code>
+        <div v-if="showExpandButton && !isExpanded" class="expand-overlay">
+          <button class="expand-btn" @click.stop="emit('expand')" title="展开查看完整内容">
+            <span class="expand-text">... 点击展开 ({{ prompt.content.length }} 字符)</span>
+          </button>
+        </div>
+      </div>
+      
       <div class="row-meta">
-        <span class="meta-tag" v-for="tag in prompt.tags.slice(0, 3)" :key="tag">#{{ tag }}</span>
+        <span class="meta-tag" v-for="tag in prompt.tags.slice(0, 4)" :key="tag">{{ tag }}</span>
         <span class="meta-source" :class="prompt.source">
           {{ prompt.source === 'local' ? 'local' : prompt.source }}
         </span>
@@ -58,27 +156,34 @@ const catColor = computed(() => catColors[props.prompt.category] || '#64748B')
       </div>
     </div>
 
-    <!-- 操作按钮 -->
+    <!-- 操作按钮 (terminal style) -->
     <div class="row-actions">
       <button class="act-btn" @click.stop="emit('copy')" title="复制">
-        <span>{{ isCopied ? '✓' : '⎘' }}</span>
+        <span class="act-sym">cp</span>
       </button>
-      <button class="act-btn" @click.stop="emit('edit')" title="编辑">✎</button>
+      <button class="act-btn" @click.stop="emit('expand')" title="展开/收起">
+        <span class="act-sym">{{ isExpanded ? 'cl' : 'op' }}</span>
+      </button>
+      <button class="act-btn" @click.stop="emit('edit')" title="编辑">
+        <span class="act-sym">ed</span>
+      </button>
       <button
-        class="act-btn default"
+        class="act-btn fav"
         :class="{ active: isDefault }"
         @click.stop="emit('set-default')"
         title="设为默认"
       >
-        ★
+        <span class="act-sym">df</span>
       </button>
-      <button class="act-btn del" @click.stop="emit('delete')" title="删除">×</button>
+      <button class="act-btn del" @click.stop="emit('delete')" title="删除">
+        <span class="act-sym">rm</span>
+      </button>
     </div>
 
     <!-- 复制成功覆盖 -->
     <Transition name="flash">
       <div v-if="isCopied" class="copy-flash">
-        <span class="flash-icon">✓</span> copied to clipboard
+        <span class="flash-ok">[OK]</span> copied
       </div>
     </Transition>
   </div>
@@ -89,14 +194,35 @@ const catColor = computed(() => catColors[props.prompt.category] || '#64748B')
   display: flex;
   align-items: stretch;
   padding: 0;
-  border-bottom: 1px solid rgba(30, 58, 95, 0.4);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.1s ease;
+  transition: all var(--transition-normal);
   position: relative;
+  overflow: visible;
+  outline: none;
+}
+
+.prompt-row:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.prompt-row.is-expanded {
+  background: var(--bg-primary);
+  border-color: var(--primary);
+  box-shadow: var(--glow-md);
+}
+
+.prompt-row.has-variables {
+  border-left: 3px solid var(--accent);
 }
 
 .prompt-row:hover {
-  background: var(--bg-hover);
+  border-color: var(--border-active);
+  box-shadow: var(--glow-sm);
+  transform: translateX(2px);
 }
 
 .prompt-row:hover .row-actions {
@@ -104,39 +230,60 @@ const catColor = computed(() => catColors[props.prompt.category] || '#64748B')
 }
 
 .prompt-row.copied {
-  background: rgba(0, 212, 170, 0.06);
+  border-color: var(--terminal-green);
+  box-shadow: 0 0 10px var(--terminal-green-glow);
 }
 
-/* 默认提示词 - 荧光背景 */
+/* ── Default prompt highlight ── */
 .prompt-row.is-default {
-  background: rgba(0, 255, 136, 0.12);
-  border-left: 3px solid #00ff88;
-  box-shadow: inset 0 0 20px rgba(0, 255, 136, 0.1);
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--primary);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.12), inset 0 0 20px rgba(99, 102, 241, 0.04);
 }
-
 .prompt-row.is-default:hover {
-  background: rgba(0, 255, 136, 0.18);
-  box-shadow: inset 0 0 30px rgba(0, 255, 136, 0.15), 0 0 10px rgba(0, 255, 136, 0.1);
+  background: rgba(99, 102, 241, 0.14);
+  box-shadow: 0 0 18px rgba(99, 102, 241, 0.18), inset 0 0 30px rgba(99, 102, 241, 0.06);
 }
 
-/* 行号槽 */
+/* ── Gutter ── */
 .row-gutter {
-  width: 32px;
+  width: 28px;
+  min-width: 28px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 10px;
+  padding-top: 12px;
   flex-shrink: 0;
+  border-right: 1px solid var(--border-light);
+  position: relative;
+}
+.line-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  opacity: 0.6;
+  transition: all var(--transition-normal);
+}
+.prompt-row:hover .line-dot { opacity: 1; box-shadow: 0 0 6px currentColor; }
+
+.variable-indicator {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  font-size: 7px;
+  color: var(--accent);
+  font-weight: 700;
+  background: rgba(139, 92, 246, 0.1);
+  padding: 1px 3px;
+  border-radius: 2px;
+  opacity: 0.7;
+  letter-spacing: 0.3px;
 }
 
-.line-no {
-  font-size: 10px;
-}
-
-/* 主内容 */
+/* ── Content ── */
 .row-content {
   flex: 1;
-  padding: 8px 0;
+  padding: 10px 12px;
   min-width: 0;
 }
 
@@ -144,9 +291,15 @@ const catColor = computed(() => catColors[props.prompt.category] || '#64748B')
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
 }
-
+.row-prompt {
+  color: var(--terminal-green);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
 .row-title {
   font-size: 13px;
   font-weight: 600;
@@ -154,151 +307,237 @@ const catColor = computed(() => catColors[props.prompt.category] || '#64748B')
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.3px;
 }
-
-.star {
-  color: var(--accent-color);
-  font-size: 12px;
+.fav-mark {
+  color: var(--warning);
+  font-size: 13px;
+  font-weight: bold;
   flex-shrink: 0;
 }
-
 .default-badge {
   font-size: 9px;
   font-weight: 700;
-  color: #00ff88;
-  background: rgba(0, 255, 136, 0.15);
-  border: 1px solid rgba(0, 255, 136, 0.4);
+  color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* ── Variable Badge ── */
+.variable-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.35);
   padding: 1px 5px;
   border-radius: 3px;
-  text-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
-  box-shadow: 0 0 6px rgba(0, 255, 136, 0.2);
+  letter-spacing: 0.3px;
   flex-shrink: 0;
-  letter-spacing: 0.5px;
+  cursor: default;
+}
+.variable-bracket {
+  opacity: 0.5;
+  font-size: 8px;
 }
 
-.row-body {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
-  padding: 6px 10px;
-  background: var(--bg-input);
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  transition: border-color 0.15s ease;
-}
-
-.prompt-row:hover .row-body {
-  border-color: var(--border-color);
-}
-
-/* 元信息 */
-.row-meta {
+/* ── Variable Hint ── */
+.variable-hint {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
-  font-size: 11px;
-}
-
-.meta-tag {
-  color: var(--primary-color);
-  opacity: 0.7;
-}
-
-.meta-source {
-  color: var(--text-muted);
-  padding: 0 4px;
-  border: 1px solid var(--border-color);
-  border-radius: 2px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
   font-size: 10px;
 }
-
-.meta-source.local { color: var(--success-color); border-color: rgba(34,197,94,0.3); }
-
-.meta-usage {
+.hint-text {
+  color: var(--accent);
+  font-weight: 600;
+}
+.hint-vars {
   color: var(--text-muted);
-  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
-/* 操作按钮 */
+/* ── Body (code block) ── */
+.row-body {
+  position: relative;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  transition: border-color var(--transition-normal);
+  min-height: 40px;
+}
+.prompt-row:hover .row-body {
+  border-color: var(--border-active);
+}
+.body-code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  display: block;
+}
+
+/* ── Expand Overlay ── */
+.expand-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, 
+    rgba(15, 23, 42, 0) 0%, 
+    rgba(15, 23, 42, 0.7) 30%, 
+    rgba(15, 23, 42, 0.95) 100%
+  );
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px 10px 8px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+.prompt-row:hover .expand-overlay {
+  opacity: 1;
+}
+
+.expand-btn {
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  backdrop-filter: blur(4px);
+}
+
+.expand-btn:hover {
+  background: rgba(99, 102, 241, 0.3);
+  border-color: var(--primary);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+}
+
+.expand-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--primary-light);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* ── Meta ── */
+.row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+}
+.meta-tag {
+  font-size: 10px;
+  color: var(--primary-light);
+  opacity: 0.7;
+  letter-spacing: 0.3px;
+}
+.meta-source {
+  font-size: 9px;
+  color: var(--text-muted);
+  padding: 0 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.meta-source.local {
+  color: var(--terminal-green);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.meta-usage {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Actions ── */
 .row-actions {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  padding: 0 8px;
+  padding: 8px 6px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-normal);
+  border-left: 1px solid var(--border-light);
 }
-
 .act-btn {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 22px;
   border: none;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
   cursor: pointer;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.1s ease;
+  transition: all var(--transition-fast);
 }
+.act-btn:hover { background: var(--bg-hover); }
+.act-btn.del:hover { background: rgba(239, 68, 68, 0.12); }
 
-.act-btn:hover {
-  background: var(--bg-card);
-  color: var(--primary-color);
-}
-
-.act-btn.del:hover {
-  color: var(--error-color);
-}
-
-.act-btn.default {
+.act-sym {
+  font-family: var(--font-mono);
+  font-size: 9px;
   color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
+.act-btn:hover .act-sym { color: var(--primary-light); }
+.act-btn.fav.active .act-sym { color: var(--primary-light); }
+.act-btn.del:hover .act-sym { color: #FCA5A5; }
 
-.act-btn.default.active {
-  color: #00ff88;
-  text-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
-}
-
-.act-btn.default:hover {
-  color: #00ff88;
-}
-
-/* 复制成功 */
+/* ── Copy Flash ── */
 .copy-flash {
   position: absolute;
   inset: 0;
-  background: rgba(0, 212, 170, 0.12);
+  background: rgba(74, 222, 128, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--primary-color);
+  color: var(--terminal-green);
   font-weight: 600;
   z-index: 1;
+  letter-spacing: 0.5px;
 }
-
-.flash-icon {
-  width: 20px;
-  height: 20px;
-  background: var(--primary-color);
+.flash-ok {
   color: var(--bg-primary);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
+  background: var(--terminal-green);
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
 }
 
-.flash-enter-active, .flash-leave-active { transition: all 0.2s ease; }
+.flash-enter-active, .flash-leave-active { transition: all var(--transition-normal); }
 .flash-enter-from, .flash-leave-to { opacity: 0; }
 </style>

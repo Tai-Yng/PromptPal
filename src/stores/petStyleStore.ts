@@ -264,6 +264,7 @@ export const usePetStyleStore = defineStore('petStyle', () => {
     updateColor,
     updateShape,
     importSprite,
-    clearSprite
+    clearSprite,
+    saveToStorage
   }
 })

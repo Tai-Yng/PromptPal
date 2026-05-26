@@ -6,58 +6,67 @@ import { useSettingsStore } from '../stores/settingsStore'
 const todoStore = useTodoStore()
 const settingsStore = useSettingsStore()
 
-// ── Plan ──
-const showNewPlan = ref(false)
-const newPlanName = ref('')
+// Plan 视图 or 分类视图
+type ViewMode = 'plan' | string  // 'plan' | category_id
+const viewMode = ref<ViewMode>('plan')
 
-const createPlan = () => {
-  const name = newPlanName.value.trim()
+const isPlanView = computed(() => viewMode.value === 'plan')
+const activeCatId = computed(() => isPlanView.value ? '' : viewMode.value as string)
+
+const showList = computed(() => {
+  if (isPlanView.value) return todoStore.planItems
+  return todoStore.itemsByCategory(viewMode.value as string)
+})
+
+const showActive = computed(() => showList.value.filter(i => !i.done))
+const showDone = computed(() => showList.value.filter(i => i.done))
+
+const planCount = computed(() => todoStore.planActive.length)
+
+// Category 管理
+const showAddCat = ref(false)
+const newCatName = ref('')
+const addNewCategory = () => {
+  const name = newCatName.value.trim()
   if (!name) return
-  todoStore.addPlan(name)
-  newPlanName.value = ''
-  showNewPlan.value = false
+  todoStore.addCategory(name)
+  newCatName.value = ''
+  showAddCat.value = false
 }
 
-// ── Add task ──
+// Add task
 const newTaskText = ref('')
 const activeCat = ref('work')
-
 const addTask = () => {
   const text = newTaskText.value.trim()
   if (!text) return
-  todoStore.addItem(text, activeCat.value)
+  // 在分类视图时自动使用当前分类
+  const cat = isPlanView.value ? activeCat.value : (viewMode.value as string)
+  todoStore.addItem(text, cat)
   newTaskText.value = ''
+  // 切换到对应分类查看
+  if (isPlanView.value) viewMode.value = cat
 }
-
 const handleKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Enter') addTask()
 }
 
-// ── AI 生成计划 ──
+// AI generate
 const showAiInput = ref(false)
 const aiPrompt = ref('')
 const isGenerating = ref(false)
+const aiTargetCat = ref('work')
 
-const generatePlan = async () => {
+const generateWithAi = async () => {
   const prompt = aiPrompt.value.trim()
   if (!prompt || !settingsStore.aiConfig.apiKey) return
-
   isGenerating.value = true
+
   try {
     const catLabels = todoStore.categories.map(c => `${c.id}: ${c.name}`).join(', ')
     const catIds = todoStore.categories.map(c => c.id).join(', ')
 
-    const systemPrompt = `You are a study/life planning assistant. Create a structured plan with a title and todo items. Output format:
-Line 1: plan_title (a short 2-6 word title for the plan, in the user's language)
-Then one todo per line in format: "category_id: task_text"
-Available categories: ${catLabels}
-Category ids: ${catIds}
-
-Rules:
-- Keep the plan title concise
-- 4-10 todo items
-- Each item under 60 characters
-- No numbering, no bullets, no extra text`
+    const systemPrompt = `You are a task planning assistant. Break the user's goal into 4-8 actionable todo items. Assign each to one of these categories: ${catLabels}. Output ONLY the items, one per line, in format: "category_id: task_text". No numbering, no bullets, no extra text. Keep each item under 60 characters. Category ids: ${catIds}.`
 
     const response = await fetch(settingsStore.aiConfig.apiUrl, {
       method: 'POST',
@@ -72,43 +81,31 @@ Rules:
           { role: 'user', content: prompt }
         ],
         stream: false,
-        max_tokens: 800
+        max_tokens: 700
       })
     })
 
-    if (!response.ok) {
-      const err = await response.text()
-      alert(`[ERR] ${err.slice(0, 100)}`)
-      return
-    }
-
+    if (!response.ok) { alert(`[ERR] ${(await response.text()).slice(0, 100)}`); return }
     const data = await response.json()
     const raw = data.choices?.[0]?.message?.content || ''
     const lines = raw.split('\n').map((l: string) => l.trim()).filter((l: string) => l)
 
-    if (lines.length < 2) {
-      alert('[ERR] AI returned too few items')
-      return
-    }
-
-    // 第一行是计划标题
-    const planTitle = lines[0]
-    todoStore.addPlan(planTitle)
-    const pid = todoStore.activePlanId
-
-    // 后续行是 todo
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i]
-      const colonIdx = line.indexOf(':')
-      if (colonIdx < 0) continue
-      const catId = line.slice(0, colonIdx).trim().toLowerCase()
-      const text = line.slice(colonIdx + 1).trim()
+    for (const line of lines) {
+      const ci = line.indexOf(':')
+      if (ci < 0) continue
+      const catId = line.slice(0, ci).trim().toLowerCase()
+      const text = line.slice(ci + 1).trim()
       if (!text || !todoStore.categories.find(c => c.id === catId)) continue
-      todoStore.addItem(text, catId, pid)
+      todoStore.addItem(text, catId)
     }
 
     aiPrompt.value = ''
     showAiInput.value = false
+    // 切换到第一个 AI 生成的分类
+    if (lines.length > 0) {
+      const ci = lines[0].indexOf(':')
+      if (ci > 0) viewMode.value = lines[0].slice(0, ci).trim().toLowerCase()
+    }
   } catch (err: any) {
     alert(`[ERR] ${err.message}`)
   } finally {
@@ -116,111 +113,43 @@ Rules:
   }
 }
 
-// ── Category management ──
-const showAddCat = ref(false)
-const newCatName = ref('')
+const clearDone = () => { if (showDone.value.length > 0) todoStore.clearDone() }
 
-const addNewCategory = () => {
-  const name = newCatName.value.trim()
-  if (!name) return
-  todoStore.addCategory(name)
-  newCatName.value = ''
-  showAddCat.value = false
-}
-
-const clearAllDone = () => {
-  if (todoStore.doneItems.length === 0) return
-  todoStore.clearDone()
-}
-
-const planHasContent = computed(() => todoStore.planItems.length > 0)
+const showDeleteCat = (id: string) => !['work', 'study', 'personal'].includes(id)
 </script>
 
 <template>
   <div class="todo-panel">
-    <!-- Plan Tabs -->
-    <div class="plan-tabs">
+    <!-- View Tabs -->
+    <div class="view-tabs">
+      <!-- Plan tab -->
       <button
-        v-for="plan in todoStore.plans"
-        :key="plan.id"
-        class="plan-tab"
-        :class="{ active: todoStore.activePlanId === plan.id }"
-        @click="todoStore.setActivePlan(plan.id)"
+        class="view-tab plan"
+        :class="{ active: isPlanView }"
+        @click="viewMode = 'plan'"
       >
-        {{ plan.name }}
-        <span
-          class="plan-del"
-          @click.stop="todoStore.deletePlan(plan.id)"
-          title="delete plan"
-        >×</span>
+        <span class="plan-dot">●</span>
+        plan
+        <span v-if="planCount > 0" class="plan-badge">{{ planCount }}</span>
       </button>
 
-      <!-- New plan -->
-      <div class="add-plan-wrap">
-        <button v-if="!showNewPlan" class="plan-tab add" @click="showNewPlan = true">+ new plan</button>
-        <div v-else class="add-plan-form">
-          <input
-            v-model="newPlanName"
-            class="plan-name-input"
-            placeholder="plan name"
-            @keydown.enter="createPlan"
-            @keydown.escape="showNewPlan = false"
-          />
-          <button class="btn-ok" @click="createPlan">ok</button>
-          <button class="btn-cancel" @click="showNewPlan = false">x</button>
-        </div>
-      </div>
-    </div>
+      <!-- Category tabs -->
+      <button
+        v-for="cat in todoStore.categories"
+        :key="cat.id"
+        class="view-tab cat"
+        :class="{ active: viewMode === cat.id }"
+        :style="{ '--cc': cat.color }"
+        @click="viewMode = cat.id"
+      >{{ cat.name }}</button>
 
-    <!-- Active plan indicator -->
-    <div v-if="todoStore.activePlan" class="plan-indicator">
-      <span class="plan-label">plan:</span>
-      <span class="plan-name">{{ todoStore.activePlan.name }}</span>
-      <span class="plan-count">({{ todoStore.activeItems.length }} active)</span>
-    </div>
-    <div v-else class="plan-indicator empty">
-      <span class="hint-sym">&gt;</span> create a plan or generate one with AI
-    </div>
-
-    <!-- Input row -->
-    <div class="input-section">
-      <div class="todo-input-row">
-        <span class="prompt-sym">&gt;</span>
-        <input
-          v-model="newTaskText"
-          class="todo-input"
-          placeholder="add task..."
-          @keydown="handleKeydown"
-          :disabled="isGenerating"
-        />
-        <select v-model="activeCat" class="cat-select" title="category">
-          <option v-for="c in todoStore.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-        <button class="add-btn" @click="addTask" :disabled="isGenerating">+</button>
-      </div>
-    </div>
-
-    <!-- Category chips -->
-    <div class="cat-row">
-      <span v-for="c in todoStore.categories" :key="c.id" class="cat-chip" :style="{ '--cc': c.color }">
-        <span class="cat-chip-dot" :style="{ background: c.color }"></span>
-        {{ c.name }}
-        <button
-          v-if="!['work','study','personal'].includes(c.id)"
-          class="cat-chip-del"
-          @click="todoStore.deleteCategory(c.id)"
-          title="delete category"
-        >×</button>
-      </span>
+      <!-- Add category -->
       <div class="add-cat-wrap">
-        <button v-if="!showAddCat" class="cat-chip add" @click="showAddCat = true">+ cat</button>
+        <button v-if="!showAddCat" class="view-tab add" @click="showAddCat = true">+ cat</button>
         <div v-else class="add-cat-form">
           <input
-            v-model="newCatName"
-            class="cat-name-input"
-            placeholder="name"
-            @keydown.enter="addNewCategory"
-            @keydown.escape="showAddCat = false"
+            v-model="newCatName" class="cat-name-input" placeholder="name"
+            @keydown.enter="addNewCategory" @keydown.escape="showAddCat = false"
           />
           <button class="btn-ok" @click="addNewCategory">ok</button>
           <button class="btn-cancel" @click="showAddCat = false">x</button>
@@ -228,30 +157,61 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
       </div>
     </div>
 
-    <!-- AI generate plan -->
+    <!-- View indicator -->
+    <div class="view-indicator">
+      <template v-if="isPlanView">
+        <span class="ind-label">today's plan</span>
+        <span class="ind-count" v-if="planCount > 0">({{ planCount }} active)</span>
+        <span class="ind-count dim" v-else>(empty — add tasks from categories)</span>
+      </template>
+      <template v-else>
+        <span class="ind-label">category:</span>
+        <span class="cat-chip-sm" :style="{ '--cc': todoStore.getCategoryColor(viewMode) }">
+          {{ todoStore.categories.find(c => c.id === viewMode)?.name || viewMode }}
+        </span>
+        <span class="ind-count dim">({{ showActive.length }} / {{ showList.length }})</span>
+      </template>
+    </div>
+
+    <!-- Input -->
+    <div class="input-section">
+      <div class="todo-input-row">
+        <span class="prompt-sym">&gt;</span>
+        <input
+          v-model="newTaskText" class="todo-input" placeholder="add task..."
+          @keydown="handleKeydown" :disabled="isGenerating"
+        />
+        <select v-if="isPlanView" v-model="activeCat" class="cat-select">
+          <option v-for="c in todoStore.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <button class="add-btn" @click="addTask" :disabled="isGenerating">+</button>
+      </div>
+    </div>
+
+    <!-- AI generate -->
     <div class="ai-toggle-row">
       <button class="ai-toggle-btn" @click="showAiInput = !showAiInput">
         <span class="ai-sym">{{ showAiInput ? '-' : '+' }}</span>
-        generate plan with AI
+        generate with AI
       </button>
     </div>
 
     <div v-if="showAiInput" class="ai-section">
-      <div class="ai-hint">
-        AI will create a new plan with tasks, auto-categorized using your tags above.
+      <div class="ai-cat-pick">
+        <span class="pick-label">to:</span>
+        <select v-model="aiTargetCat" class="cat-select">
+          <option v-for="c in todoStore.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
       </div>
+      <div class="ai-hint">AI generates tasks auto-categorized using your tags.</div>
       <div class="todo-input-row ai-row">
         <span class="prompt-sym dim">&gt;</span>
         <input
-          v-model="aiPrompt"
-          class="todo-input"
-          placeholder="e.g. 中考科学冲刺14天计划"
-          @keydown.enter="generatePlan"
-          :disabled="isGenerating"
+          v-model="aiPrompt" class="todo-input"
+          placeholder="e.g. 中考科学复习"
+          @keydown.enter="generateWithAi" :disabled="isGenerating"
         />
-        <button
-          class="add-btn gen"
-          @click="generatePlan"
+        <button class="add-btn gen" @click="generateWithAi"
           :disabled="isGenerating || !aiPrompt.trim()"
         >{{ isGenerating ? '...' : 'go' }}</button>
       </div>
@@ -259,30 +219,30 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
 
     <div class="divider"></div>
 
-    <!-- Todo list -->
+    <!-- List -->
     <div class="todo-list">
-      <!-- Active items -->
-      <div v-for="item in todoStore.activeItems" :key="item.id" class="todo-item">
-        <span
-          class="cat-dot"
-          :style="{ background: todoStore.getCategoryColor(item.category) }"
-          :title="item.category"
-        ></span>
+      <!-- Active -->
+      <div v-for="item in showActive" :key="item.id" class="todo-item">
+        <button class="plan-btn" :class="{ on: item.inPlan }"
+          :title="item.inPlan ? 'remove from plan' : 'add to plan'"
+          @click="todoStore.togglePlan(item.id)"
+        >
+          {{ item.inPlan ? '●' : '○' }}
+        </button>
+        <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }" :title="item.category"></span>
         <button class="check-btn" title="done" @click="todoStore.toggleItem(item.id)">☐</button>
-        <span class="todo-text" @click="todoStore.toggleItem(item.id)">
-          {{ item.text }}
-          <span v-if="item.source" class="todo-source">{{ item.source }}</span>
-        </span>
+        <span class="todo-text" @click="todoStore.toggleItem(item.id)">{{ item.text }}</span>
         <button class="del-btn" title="delete" @click="todoStore.deleteItem(item.id)">×</button>
       </div>
 
-      <!-- Done items -->
-      <template v-if="todoStore.doneItems.length > 0">
+      <!-- Done -->
+      <template v-if="showDone.length > 0">
         <div class="done-header">
           <span class="done-dash">── done ──</span>
-          <button class="clear-done-btn" @click="clearAllDone">clear all</button>
+          <button class="clear-done-btn" @click="clearDone">clear all</button>
         </div>
-        <div v-for="item in todoStore.doneItems" :key="item.id" class="todo-item done">
+        <div v-for="item in showDone" :key="item.id" class="todo-item done">
+          <span class="plan-btn off"></span>
           <span class="cat-dot" :style="{ background: todoStore.getCategoryColor(item.category) }"></span>
           <button class="check-btn done" title="undo" @click="todoStore.toggleItem(item.id)">☑</button>
           <span class="todo-text" @click="todoStore.toggleItem(item.id)">{{ item.text }}</span>
@@ -290,15 +250,10 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
         </div>
       </template>
 
-      <!-- Empty -->
-      <div v-if="!planHasContent" class="empty-hint">
+      <div v-if="showList.length === 0" class="empty-hint">
         <span class="hint-sym">&gt;</span>
-        <template v-if="todoStore.activePlan">
-          add tasks above or generate with AI
-        </template>
-        <template v-else>
-          create a plan or generate one with AI to get started
-        </template>
+        <template v-if="isPlanView">pick tasks from categories to plan your day</template>
+        <template v-else>no tasks yet. add some or generate with AI</template>
       </div>
     </div>
   </div>
@@ -315,58 +270,58 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
   overflow-y: auto;
 }
 
-/* ── Plan Tabs ── */
-.plan-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
-.plan-tab {
-  padding: 6px 14px;
+/* ── Tabs ── */
+.view-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+.view-tab {
+  padding: 5px 12px;
   border: 1px solid var(--border-color);
   background: transparent;
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  display: flex; align-items: center; gap: 6px;
-  white-space: nowrap;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-muted); cursor: pointer;
+  transition: all var(--transition-normal); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px;
 }
-.plan-tab:hover { border-color: var(--primary-light); color: var(--text-primary); }
-.plan-tab.active {
+.view-tab:hover { border-color: var(--primary-light); color: var(--text-primary); }
+.view-tab.active {
   border-color: var(--primary);
   color: var(--primary);
   background: rgba(99, 102, 241, 0.08);
 }
-.plan-tab.add { border-style: dashed; font-size: 11px; padding: 6px 12px; }
-.plan-del {
-  opacity: 0; font-size: 14px; line-height: 1;
-  transition: opacity var(--transition-fast);
+.view-tab.cat.active { border-color: var(--cc); color: var(--cc); background: rgba(99, 102, 241, 0.06); }
+.view-tab.plan .plan-dot { color: var(--primary); font-size: 8px; }
+.plan-badge {
+  background: var(--primary); color: #0a0a0f;
+  font-size: 9px; padding: 1px 5px; border-radius: 8px;
+  font-weight: 700;
 }
-.plan-tab:hover .plan-del { opacity: 0.5; }
-.plan-del:hover { opacity: 1; color: var(--error); }
-.add-plan-wrap { display: flex; align-items: center; }
-.add-plan-form {
+.view-tab.add { border-style: dashed; font-size: 10px; padding: 5px 10px; }
+.add-cat-wrap { display: flex; align-items: center; }
+.add-cat-form {
   display: flex; align-items: center; gap: 4px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 3px 8px;
+  padding: 2px 6px;
 }
-.plan-name-input {
-  width: 100px; background: transparent; border: none;
-  color: var(--text-primary); font-family: var(--font-mono); font-size: 12px; outline: none;
+.cat-name-input {
+  width: 60px; background: transparent; border: none;
+  color: var(--text-primary); font-family: var(--font-mono); font-size: 11px; outline: none;
 }
 .btn-ok, .btn-cancel { background: none; border: none; font-family: var(--font-mono); font-size: 10px; cursor: pointer; }
 .btn-ok { color: var(--primary); }
 .btn-cancel { color: var(--text-muted); }
 
-/* ── Plan indicator ── */
-.plan-indicator {
-  color: var(--text-muted); font-size: 11px; padding: 2px 0 8px;
+/* ── Indicator ── */
+.view-indicator { color: var(--text-muted); font-size: 11px; padding: 2px 0 8px; }
+.ind-label { opacity: 0.5; margin-right: 4px; }
+.ind-count { opacity: 0.6; font-size: 10px; }
+.ind-count.dim { opacity: 0.4; }
+.cat-chip-sm {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px; border: 1px solid var(--cc);
+  border-radius: var(--radius-sm); font-size: 10px;
 }
-.plan-indicator.empty { opacity: 0.5; }
-.plan-label { opacity: 0.5; margin-right: 4px; }
-.plan-name { color: var(--primary); font-weight: 600; }
-.plan-count { opacity: 0.5; margin-left: 6px; }
 
 /* ── Input ── */
 .input-section { margin-bottom: 8px; }
@@ -376,7 +331,6 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
-  transition: border-color var(--transition-normal);
 }
 .todo-input-row:focus-within { border-color: var(--primary); }
 .prompt-sym { color: var(--primary); font-weight: 700; font-size: 14px; }
@@ -399,47 +353,10 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
   color: var(--primary); border-radius: var(--radius-sm);
   font-family: var(--font-mono); font-size: 16px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: all var(--transition-normal);
 }
 .add-btn:hover { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
 .add-btn.gen { width: 36px; font-size: 11px; }
 .add-btn:disabled { opacity: 0.3; cursor: default; }
-
-/* ── Category row ── */
-.cat-row {
-  display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;
-}
-.cat-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  font-size: 10px; font-family: var(--font-mono);
-  color: var(--text-muted);
-  transition: border-color var(--transition-fast);
-}
-.cat-chip:hover { border-color: var(--cc, var(--primary)); }
-.cat-chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.cat-chip-del {
-  background: none; border: none; color: var(--text-muted);
-  font-size: 12px; cursor: pointer; opacity: 0; transition: opacity var(--transition-fast);
-  line-height: 1;
-}
-.cat-chip:hover .cat-chip-del { opacity: 0.5; }
-.cat-chip-del:hover { opacity: 1; color: var(--error); }
-.cat-chip.add { border-style: dashed; cursor: pointer; }
-.add-cat-wrap { display: flex; align-items: center; }
-.add-cat-form {
-  display: flex; align-items: center; gap: 4px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 2px 6px;
-}
-.cat-name-input {
-  width: 60px; background: transparent; border: none;
-  color: var(--text-primary); font-family: var(--font-mono); font-size: 10px; outline: none;
-}
 
 /* ── AI ── */
 .ai-toggle-row { margin-bottom: 6px; }
@@ -451,6 +368,8 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
 .ai-toggle-btn:hover { color: var(--primary); }
 .ai-sym { font-size: 12px; }
 .ai-section { margin-bottom: 6px; }
+.ai-cat-pick { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.pick-label { color: var(--text-muted); font-size: 10px; }
 .ai-hint { color: var(--text-muted); font-size: 10px; opacity: 0.6; padding: 2px 0 6px; }
 .ai-row { margin-top: 2px; }
 
@@ -460,22 +379,29 @@ const planHasContent = computed(() => todoStore.planItems.length > 0)
 /* ── List ── */
 .todo-list { flex: 1; overflow-y: auto; }
 .todo-item {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 5px;
   padding: 7px 4px; border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
 }
 .todo-item:hover { background: var(--bg-secondary); }
 .todo-item.done { opacity: 0.45; }
-.cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.plan-btn {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; padding: 0; flex-shrink: 0;
+  transition: color var(--transition-fast); line-height: 1;
+}
+.plan-btn:hover { color: var(--primary); }
+.plan-btn.on { color: var(--primary); }
+.plan-btn.off { visibility: hidden; }
+.cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .check-btn {
   background: none; border: none; color: var(--primary);
   font-size: 14px; cursor: pointer; padding: 0 2px; flex-shrink: 0;
 }
 .check-btn:hover { color: var(--primary-light); }
 .check-btn.done { color: var(--text-muted); }
-.todo-text { flex: 1; font-size: 13px; cursor: default; }
+.todo-text { flex: 1; font-size: 13px; cursor: default; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .todo-item.done .todo-text { text-decoration: line-through; color: var(--text-muted); }
-.todo-source { color: var(--text-muted); font-size: 10px; opacity: 0.6; margin-left: 8px; }
 .del-btn {
   background: none; border: none; color: var(--text-muted);
   font-size: 16px; cursor: pointer; padding: 0 4px;

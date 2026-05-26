@@ -16,6 +16,7 @@ const emit = defineEmits<{
   (e: 'favorite'): void
   (e: 'set-default'): void
   (e: 'expand'): void
+  (e: 'add-todo'): void
 }>()
 
 const flashCopied = ref(false)
@@ -177,6 +178,9 @@ const displayContent = computed(() => {
       </button>
       <button class="act-btn del" @click.stop="emit('delete')" title="删除">
         <span class="act-sym">rm</span>
+      </button>
+      <button class="act-btn td" @click.stop="emit('add-todo')" title="Add to Todo">
+        <span class="act-sym">td</span>
       </button>
     </div>
 
@@ -501,6 +505,7 @@ const displayContent = computed(() => {
 }
 .act-btn:hover { background: var(--bg-hover); }
 .act-btn.del:hover { background: rgba(239, 68, 68, 0.12); }
+.act-btn.td:hover { background: rgba(34, 211, 238, 0.1); }
 
 .act-sym {
   font-family: var(--font-mono);

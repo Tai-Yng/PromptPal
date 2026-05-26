@@ -2,11 +2,13 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { usePromptStore } from '../stores/promptStore'
+import { useTodoStore } from '../stores/todoStore'
 import PromptCard from './PromptCard.vue'
 import PromptEditor from './PromptEditor.vue'
 import NetworkSearch from './NetworkSearch.vue'
 
 const store = usePromptStore()
+const todoStore = useTodoStore()
 
 const activeTab = ref<'all' | 'favorites' | 'category'>('all')
 const selectedCategory = ref('all')
@@ -130,6 +132,10 @@ const setDefaultPrompt = (id: string) => {
     store.setDefaultPrompt(id)
   }
 }
+
+const addToTodo = (p: any) => {
+  todoStore.addItem(p.title, p.title)
+}
 </script>
 
 <template>
@@ -231,6 +237,7 @@ const setDefaultPrompt = (id: string) => {
           @copy="() => copyPrompt(prompt)"
           @expand="() => expandPrompt(prompt.id)"
           @set-default="() => setDefaultPrompt(prompt.id)"
+          @add-todo="() => addToTodo(prompt)"
         />
       </TransitionGroup>
 

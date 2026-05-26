@@ -4,8 +4,9 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import PromptPanel from './PromptPanel.vue'
 import AIGeneratePanel from './AIGeneratePanel.vue'
 import SettingsPanel from './SettingsPanel.vue'
+import TodoPanel from './TodoPanel.vue'
 
-const activeView = ref<'prompt' | 'ai' | 'settings'>('prompt')
+const activeView = ref<'prompt' | 'ai' | 'todo' | 'settings'>('prompt')
 
 const closePanelWindow = async () => {
   try {
@@ -44,6 +45,14 @@ const closePanelWindow = async () => {
         </button>
         <button
           class="nav-btn"
+          :class="{ active: activeView === 'todo' }"
+          @click="activeView = 'todo'"
+        >
+          <span class="nav-prompt">+</span>
+          <span>todo</span>
+        </button>
+        <button
+          class="nav-btn"
           :class="{ active: activeView === 'settings' }"
           @click="activeView = 'settings'"
         >
@@ -62,6 +71,7 @@ const closePanelWindow = async () => {
     <main class="content">
       <PromptPanel v-if="activeView === 'prompt'" />
       <AIGeneratePanel v-if="activeView === 'ai'" @close="activeView = 'prompt'" @settings="activeView = 'settings'" />
+      <TodoPanel v-if="activeView === 'todo'" />
       <SettingsPanel v-if="activeView === 'settings'" @close="closePanelWindow" />
     </main>
   </div>

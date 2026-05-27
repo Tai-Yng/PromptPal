@@ -2,7 +2,7 @@
 
 > AI Prompt management tool with a desktop pet companion — DeepSeek terminal aesthetics.
 
-![Version](https://img.shields.io/badge/Version-1.0.0-6E40C9)
+![Version](https://img.shields.io/badge/Version-1.2.0-6E40C9)
 ![Vue](https://img.shields.io/badge/Vue-3.x-4FC08D)
 ![Tauri](https://img.shields.io/badge/Tauri-2.x-FFC131)
 ![Rust](https://img.shields.io/badge/Rust-1.77-dea584)
@@ -58,7 +58,11 @@ PromptPal is a Windows desktop application that helps you manage, generate, and 
 
 ## Screenshots
 
-*[add screenshots here]*
+### Prompt Manager — Terminal Dark Theme
+![Prompt Manager](img/img1.png)
+
+### GOGO Focus Mode — Pet Bubble Task Runner
+![GOGO Focus Mode](img/img2.png)
 
 ## Tech Stack
 

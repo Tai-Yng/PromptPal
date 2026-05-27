@@ -111,13 +111,20 @@ const completeFocusTask = () => {
   // 立即同步本地 store 以触发 UI 更新
   syncTodoStore()
 }
+// 悬浮气泡延迟隐藏：鼠标离开后等 500ms 再消失，防止误触发
+let hoverLeaveTimer: number | null = null
+
 const handleMouseEnter = () => {
   isHovering.value = true
+  if (hoverLeaveTimer) { clearTimeout(hoverLeaveTimer); hoverLeaveTimer = null }
   syncTodoStore()  // 鼠标进入立即同步，确保气泡数据最新
   wakeUp()
 }
 const handleMouseLeave = () => {
-  isHovering.value = false
+  hoverLeaveTimer = window.setTimeout(() => {
+    isHovering.value = false
+    hoverLeaveTimer = null
+  }, 500)
 }
 
 // ============ 智能气泡 ============
@@ -463,6 +470,7 @@ onUnmounted(() => {
   if (syncTimer) clearInterval(syncTimer)
   if (contextTimer) clearInterval(contextTimer)
   if (suggestDismissTimer) clearTimeout(suggestDismissTimer)
+  if (hoverLeaveTimer) clearTimeout(hoverLeaveTimer)
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
 })

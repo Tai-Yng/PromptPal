@@ -63,9 +63,20 @@ const focusClass = computed(() => ({
   taskComplete: todoStore.focusAnim === 'complete'
 }))
 
-// Polling 同步：每2秒从 localStorage 重载（storage 事件的 fallback）
+// Polling 同步：仅在 focusMode 激活时运行，节省 CPU
 let syncTimer: number | null = null
+const startSyncPolling = () => {
+  if (syncTimer) return
+  syncTimer = window.setInterval(syncTodoStore, 1000)
+}
+const stopSyncPolling = () => {
+  if (syncTimer) { clearInterval(syncTimer); syncTimer = null }
+}
+
 const syncTodoStore = () => {
+  const prevFocusMode = todoStore.focusMode
+  const prevActiveCount = todoStore.planActive.length
+
   try {
     const fm = localStorage.getItem('promptpal_focus_mode')
     if (fm !== null) todoStore.focusMode = JSON.parse(fm)
@@ -79,6 +90,25 @@ const syncTodoStore = () => {
     if (fa !== null) todoStore.focusAnim = JSON.parse(fa) as 'complete' | 'celebrate' | null
     else todoStore.focusAnim = null
   } catch {}
+
+  // Panel checkbox 完成最后任务时 pet 自动触发 celebrate
+  if (prevFocusMode && prevActiveCount > 0 && todoStore.planActive.length === 0) {
+    todoStore.focusAnim = 'celebrate'
+    localStorage.setItem('promptpal_focus_anim', JSON.stringify('celebrate'))
+    setTimeout(() => {
+      todoStore.focusAnim = null
+      todoStore.focusMode = false
+      localStorage.setItem('promptpal_focus_anim', JSON.stringify(null))
+      localStorage.setItem('promptpal_focus_mode', JSON.stringify(false))
+    }, 3000)
+  }
+
+  // 动态启停 polling
+  if (todoStore.focusMode) {
+    startSyncPolling()
+  } else {
+    stopSyncPolling()
+  }
 }
 
 // 完成当前任务（直接操作 localStorage，避免跨窗口 store 竞争）
@@ -461,13 +491,13 @@ onMounted(async () => {
   moveTimer = window.setInterval(move, 120)
   sleepTimer = window.setInterval(checkSleep, 10000)
   contextTimer = window.setInterval(checkContext, 5000)
-  syncTimer = window.setInterval(syncTodoStore, 1000)  // 跨窗口同步 fallback (1s)
+  syncTodoStore()  // 初始化同步，focusMode=on 时自动启动 polling
 })
 
 onUnmounted(() => {
   if (moveTimer) clearInterval(moveTimer)
   if (sleepTimer) clearInterval(sleepTimer)
-  if (syncTimer) clearInterval(syncTimer)
+  stopSyncPolling()
   if (contextTimer) clearInterval(contextTimer)
   if (suggestDismissTimer) clearTimeout(suggestDismissTimer)
   if (hoverLeaveTimer) clearTimeout(hoverLeaveTimer)

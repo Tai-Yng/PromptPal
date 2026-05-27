@@ -113,6 +113,7 @@ const completeFocusTask = () => {
 }
 const handleMouseEnter = () => {
   isHovering.value = true
+  syncTodoStore()  // 鼠标进入立即同步，确保气泡数据最新
   wakeUp()
 }
 const handleMouseLeave = () => {
@@ -453,7 +454,7 @@ onMounted(async () => {
   moveTimer = window.setInterval(move, 120)
   sleepTimer = window.setInterval(checkSleep, 10000)
   contextTimer = window.setInterval(checkContext, 5000)
-  syncTimer = window.setInterval(syncTodoStore, 2000)  // 跨窗口同步 fallback
+  syncTimer = window.setInterval(syncTodoStore, 1000)  // 跨窗口同步 fallback (1s)
 })
 
 onUnmounted(() => {
@@ -501,6 +502,9 @@ onUnmounted(() => {
 
       <div v-if="showCopySuccess" class="copy-tip">已复制!</div>
       <div v-if="showSleepZzz" class="zzz"><span>Z</span><span>z</span><span>z</span></div>
+      <div v-if="todoStore.focusMode && todoStore.planActive.length > 0" class="focus-indicator" title="focus mode active">
+        <span class="focus-dot">●</span>
+      </div>
     </div>
 
     <!-- 智能气泡建议 -->
@@ -531,9 +535,9 @@ onUnmounted(() => {
       </div>
     </Transition>
 
-    <!-- 庆祝动画气泡 -->
+    <!-- 庆祝动画气泡（不依赖 showFocusBubble，因为全完成时 currentFocusTask 为 null） -->
     <Transition name="bubble">
-      <div v-if="showFocusBubble && focusBubbleState === 'celebrate'" class="focus-bubble celebrate-anim">
+      <div v-if="focusBubbleState === 'celebrate'" class="focus-bubble celebrate-anim">
         <div class="celebrate-text">🎉 ALL DONE!</div>
         <div class="celebrate-sub">Great job!</div>
       </div>
@@ -728,6 +732,24 @@ onUnmounted(() => {
 .zzz span:nth-child(2) { animation-delay: 0.3s; font-size: 10px; }
 .zzz span:nth-child(3) { animation-delay: 0.6s; font-size: 8px; }
 
+/* Focus mode active indicator (always visible when focus is on) */
+.focus-indicator {
+  position: absolute;
+  top: -8px;
+  left: -5px;
+  z-index: 5;
+}
+.focus-dot {
+  color: var(--primary, #6366F1);
+  font-size: 10px;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  text-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
 .context-menu {
   position: fixed;
   top: 50%;
@@ -757,7 +779,7 @@ onUnmounted(() => {
 /* ── Suggest Bubble ── */
 .suggest-bubble {
   position: absolute;
-  bottom: 110%;
+  bottom: 100px;    /* 相对 pet-window (380px)，气泡底部在宠物上方 */
   left: 50%;
   transform: translateX(-50%);
   background: rgba(9, 9, 11, 0.95);
@@ -816,7 +838,7 @@ onUnmounted(() => {
 /* ── Focus Bubble ── */
 .focus-bubble {
   position: absolute;
-  bottom: 110%;
+  bottom: 100px;    /* 相对 pet-window (380px)，气泡底部在宠物上方 */
   left: 50%;
   transform: translateX(-50%);
   background: rgba(9, 9, 11, 0.95);

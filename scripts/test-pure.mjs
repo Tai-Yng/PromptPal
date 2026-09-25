@@ -11,9 +11,9 @@ import { pathToFileURL } from 'node:url'
 
 const tmp = mkdtempSync(join(tmpdir(), 'promptpal-test-'))
 let failures = 0
-const test = (name, fn) => {
+const test = async (name, fn) => {
   try {
-    fn()
+    await fn()
     console.log(`  [OK] ${name}`)
   } catch (e) {
     failures++
@@ -40,10 +40,12 @@ const bundle = (entry, out) => {
 }
 
 let storageUrl = null
+let variablesUrl = null
 try {
   storageUrl = bundle('src/services/storage.ts', 'storage.mjs')
+  variablesUrl = bundle('src/services/variables.ts', 'variables.mjs')
 } catch (e) {
-  console.error('[FAIL] esbuild bundle storage.ts:', e?.message || e)
+  console.error('[FAIL] esbuild bundle:', e?.message || e)
   process.exit(1)
 }
 
@@ -53,49 +55,117 @@ console.log('storage.ts:')
   globalThis.localStorage = new MemStore()
   const storage = await import(storageUrl)
 
-  test('saveJson/loadJson 往返', () => {
+  await test('saveJson/loadJson 往返', () => {
     storage.saveJson('k1', { a: 1, b: ['x'] })
     assert.deepEqual(storage.loadJson('k1', null), { a: 1, b: ['x'] })
   })
 
-  test('loadJson 键不存在返回 fallback', () => {
+  await test('loadJson 键不存在返回 fallback', () => {
     assert.equal(storage.loadJson('missing', 'fb'), 'fb')
   })
 
-  test('loadJson 损坏 JSON 返回 fallback 而不抛出', () => {
+  await test('loadJson 损坏 JSON 返回 fallback 而不抛出', () => {
     globalThis.localStorage.setItem('bad', '{not json')
     assert.equal(storage.loadJson('bad', 'fb'), 'fb')
   })
 
-  test('loadJson validate 不过返回 fallback', () => {
+  await test('loadJson validate 不过返回 fallback', () => {
     globalThis.localStorage.setItem('v', '{"n":"not-a-number"}')
     const got = storage.loadJson('v', 0, raw => typeof raw === 'object' && raw && typeof raw.n === 'number' ? raw.n : null)
     assert.equal(got, 0)
   })
 
-  test('loadJson validate 通过返回规整值', () => {
+  await test('loadJson validate 通过返回规整值', () => {
     globalThis.localStorage.setItem('v2', '{"n":42}')
     const got = storage.loadJson('v2', 0, raw => typeof raw === 'object' && raw && typeof raw.n === 'number' ? raw.n : null)
     assert.equal(got, 42)
   })
 
-  test('loadString/saveString 与版本键', () => {
+  await test('loadString/saveString 与版本键', () => {
     storage.saveString('s1', 'plain-text')
     assert.equal(storage.loadString('s1'), 'plain-text')
     assert.equal(storage.loadString('nope'), null)
   })
 
-  test('ensureSchemaVersion 写入当前版本且幂等', () => {
+  await test('ensureSchemaVersion 写入当前版本且幂等', () => {
     storage.ensureSchemaVersion()
     assert.equal(storage.loadString('promptpal_schema_version'), '1')
     storage.ensureSchemaVersion()
     assert.equal(storage.loadString('promptpal_schema_version'), '1')
   })
 
-  test('损坏的版本号被纠正', () => {
+  await test('损坏的版本号被纠正', () => {
     storage.saveString('promptpal_schema_version', 'garbage')
     storage.ensureSchemaVersion()
     assert.equal(storage.loadString('promptpal_schema_version'), '1')
+  })
+}
+
+// ===== variables.ts =====
+console.log('variables.ts:')
+{
+  globalThis.localStorage = new MemStore()
+  const vars = await import(variablesUrl)
+
+  await test('双语法识别且 -- 参数排除', () => {
+    const list = vars.parseVariables('画一张 [风格] 的 {{主体}}，--ar 16:9')
+    assert.deepEqual(list.map(v => v.name), ['风格', '主体'])
+    assert.equal(list[0].syntax, 'bracket')
+    assert.equal(list[1].syntax, 'brace')
+  })
+
+  await test('同名去重且保持首现顺序', () => {
+    const list = vars.parseVariables('{{b}} [a] {{b}} [c] [a]')
+    assert.deepEqual(list.map(v => v.name), ['b', 'a', 'c'])
+  })
+
+  await test('-- 开头占位符不识别', () => {
+    const list = vars.parseVariables('[--ar] [风格]')
+    assert.deepEqual(list.map(v => v.name), ['风格'])
+  })
+
+  await test('超长(>40)与嵌套括号不识别', () => {
+    const long = 'x'.repeat(41)
+    assert.deepEqual(vars.parseVariables(`[${long}] {{${long}}}`), [])
+    assert.deepEqual(vars.parseVariables('[[嵌套]]'), [])
+  })
+
+  await test('substitute 替换已填、留空保留占位符', () => {
+    const out = vars.substitute('画一张 [风格] 的 {{主体}}，--ar 16:9', { 主体: '一只猫' })
+    assert.equal(out, '画一张 [风格] 的 一只猫，--ar 16:9')
+  })
+
+  await test('substitute 空白值视为留空', () => {
+    const out = vars.substitute('{{a}}', { a: '   ' })
+    assert.equal(out, '{{a}}')
+  })
+
+  await test('记忆读写与预填', () => {
+    vars.rememberVar('p1', '风格', '油画')
+    assert.equal(vars.recallVar('p1', '风格'), '油画')
+    assert.equal(vars.recallVar('p1', '不存在'), '')
+  })
+
+  await test('跨模块实例记忆持久化（重新求值可读回）', async () => {
+    const vars2 = await import(variablesUrl + '?reimport')
+    assert.equal(vars2.recallVar('p1', '风格'), '油画')
+  })
+
+  await test('记忆 LRU 超限淘汰最旧条目', async () => {
+    // 上限 1000：灌满后直接改写时间戳制造确定性顺序
+    for (let i = 0; i < 1000; i++) vars.rememberVar('p', `v${i}`, `val${i}`)
+    const mem = JSON.parse(globalThis.localStorage.getItem('promptpal_var_memory'))
+    const now = Date.now()
+    mem['p::v0'].t = now + 5000   // v0 变为最新（模拟刚被触碰）
+    mem['p::v1'].t = now - 5000   // v1 变为最旧
+    globalThis.localStorage.setItem('promptpal_var_memory', JSON.stringify(mem))
+    vars.rememberVar('p', 'v-new', 'x')  // 第 1001 条触发淘汰
+    const after = JSON.parse(globalThis.localStorage.getItem('promptpal_var_memory'))
+    const keys = Object.keys(after)
+    assert.equal(keys.length, 1000)
+    assert.ok(!keys.includes('p::v1'), '最旧的 v1 应被淘汰')
+    assert.ok(keys.includes('p::v0'), '被标记为最新的 v0 应保留')
+    assert.ok(keys.includes('p::v-new'), '最新条目应保留')
   })
 }
 

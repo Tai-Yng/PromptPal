@@ -10,7 +10,8 @@
     "tauri": "cargo tauri",
     "tauri:dev": "cargo tauri dev",
     "tauri:build": "cargo tauri build",
-    "build:cli": "node scripts/build-cli.cjs"
+    "build:cli": "node scripts/build-cli.cjs",
+    "test": "node scripts/test-pure.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.7",

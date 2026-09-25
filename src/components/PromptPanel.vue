@@ -6,6 +6,8 @@ import { useTodoStore } from '../stores/todoStore'
 import PromptCard from './PromptCard.vue'
 import PromptEditor from './PromptEditor.vue'
 import NetworkSearch from './NetworkSearch.vue'
+import VariableFillDialog from './VariableFillDialog.vue'
+import { parseVariables } from '../services/variables'
 
 const store = usePromptStore()
 const todoStore = useTodoStore()
@@ -118,7 +120,27 @@ const deletePrompt = (id: string) => {
   if (confirm('delete this prompt?')) store.deletePrompt(id)
   if (expandedPromptId.value === id) expandedPromptId.value = null
 }
+// 复制：含变量则先弹填空浮层，无变量直接复制（零回归）
+const fillPrompt = ref<any>(null)
 const copyPrompt = async (p: any) => {
+  if (parseVariables(String(p?.content ?? '')).length > 0) {
+    fillPrompt.value = p
+    return
+  }
+  const ok = await store.copyToClipboard(p.content)
+  if (ok) store.incrementUseCount(p.id)
+}
+const handleFillConfirm = async (text: string) => {
+  const p = fillPrompt.value
+  fillPrompt.value = null
+  if (!p) return
+  const ok = await store.copyToClipboard(text)
+  if (ok) store.incrementUseCount(p.id)
+}
+const handleCopyOriginal = async () => {
+  const p = fillPrompt.value
+  fillPrompt.value = null
+  if (!p) return
   const ok = await store.copyToClipboard(p.content)
   if (ok) store.incrementUseCount(p.id)
 }
@@ -266,6 +288,17 @@ const addToTodo = (p: any) => {
         @close="closeEditor"
       />
     </div>
+
+    <!-- 变量填空弹窗 -->
+    <VariableFillDialog
+      v-if="fillPrompt"
+      :prompt-id="fillPrompt.id"
+      :title="fillPrompt.title"
+      :content="fillPrompt.content"
+      @confirm="handleFillConfirm"
+      @copy-original="handleCopyOriginal"
+      @close="fillPrompt = null"
+    />
   </div>
 </template>
 

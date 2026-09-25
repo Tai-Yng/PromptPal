@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { Prompt } from '../types'
+import { parseVariables } from '../services/variables'
 
 const props = defineProps<{
   prompt: Prompt
@@ -30,9 +31,7 @@ const truncated = computed(() => {
   return props.prompt.content
 })
 
-const hasVariables = computed(() => {
-  return props.prompt.content.includes('{{') && props.prompt.content.includes('}}')
-})
+const hasVariables = computed(() => extractedVariables.value.length > 0)
 
 const showExpandButton = computed(() => {
   return props.prompt.content.length > 150
@@ -80,15 +79,9 @@ const catColors: Record<string, string> = {
 
 const catColor = computed(() => catColors[props.prompt.category] || '#6B7280')
 
-// 变量提取
+// 变量提取（共享解析：[名称] 与 {{名称}} 双语法，顺序去重）
 const extractedVariables = computed(() => {
-  const vars = new Set<string>()
-  const regex = /\{\{(\w+)\}\}/g
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(props.prompt.content)) !== null) {
-    vars.add(match[1])
-  }
-  return Array.from(vars)
+  return parseVariables(props.prompt.content).map(v => v.name)
 })
 
 const displayContent = computed(() => {

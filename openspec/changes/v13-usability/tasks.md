@@ -10,11 +10,11 @@
 
 ## 2. 阶段二：模板变量填空
 
-- [ ] 2.1 新建 `src/services/variables.ts`：`parseVariables`（双语法、1–40 字、无嵌套、排除 `--` 参数、顺序去重）与 `substitute`（留空保留占位符），并补 `scripts/test-pure.mjs` 断言（双语法/去重/留空/`--` 排除/误报样例）——验证：`node scripts/test-pure.mjs` 全绿
-- [ ] 2.2 新建 `VariableFillDialog.vue`：terminal 风格填空浮层（输入框预填记忆值、实时预览替换结果、确认复制、常驻「复制原文」）——验证：组件渲染与交互手测通过
-- [ ] 2.3 变量记忆：`promptpal_var_memory` 经 storage.ts 持久化，1000 条 LRU 上限——验证：纯函数断言覆盖超限淘汰最旧条目
-- [ ] 2.4 主面板复制入口（PromptCard 双击等）接入：无变量直通零回归、有变量弹填空——验证：手测无变量不弹窗、填空复制、误报「复制原文」、留空保留占位符四场景
-- [ ] 2.5 阶段二 commit（`feat`）并推送——验证：本地 tsc+build+测试脚本全绿
+- [x] 2.1 新建 `src/services/variables.ts`：`parseVariables`（双语法、1–40 字、无嵌套、排除 `--` 参数、顺序去重）与 `substitute`（留空保留占位符），并补 `scripts/test-pure.mjs` 断言（双语法/去重/留空/`--` 排除/误报样例）——验证：`node scripts/test-pure.mjs` 全绿
+- [x] 2.2 新建 `VariableFillDialog.vue`：terminal 风格填空浮层（输入框预填记忆值、实时预览替换结果、确认复制、常驻「复制原文」）——验证：组件渲染与交互手测通过
+- [x] 2.3 变量记忆：`promptpal_var_memory` 经 storage.ts 持久化，1000 条 LRU 上限——验证：纯函数断言覆盖超限淘汰最旧条目
+- [x] 2.4 主面板复制入口（PromptCard 双击等）接入：无变量直通零回归、有变量弹填空——验证：手测无变量不弹窗、填空复制、误报「复制原文」、留空保留占位符四场景
+- [x] 2.5 阶段二 commit（`feat`）并推送——验证：本地 tsc+build+测试脚本全绿
 
 ## 3. 阶段三：快捷注入增强
 

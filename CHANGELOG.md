@@ -4,6 +4,29 @@ All notable changes to PromptPal will be documented in this file.
 
 ---
 
+## v1.3.0 (2026-09-25)
+
+### Added
+- **Template variable fill-in**: `[placeholder]` and `{{variable}}` syntax auto-detected on copy; terminal-style fill dialog with live preview, per-prompt value memory (LRU cap 1000), and a persistent "copy original" escape hatch
+- **Quick inject enhancements**: favorites-first / usage-count sorting, category color dots, search resets selection
+- **Gitee auto-sync**: 60s debounced auto-push after data changes (only when configured + enabled), startup pull with newer-remote confirmation banner, silent pull on empty library, exit flush (≤3s, never blocks quitting)
+- **Rolling backup**: timestamped `promptpal_data.backup-*.json` before every push, keep last 5
+- **CI**: GitHub Actions — type check, build, pure-function tests on push/PR
+- Unified storage layer (`loadJson`/`saveJson` + schema version chain) shared by all stores
+
+### Fixed
+- Claude API: system prompt now sent as top-level field (Messages API rejected `role:'system'`); SSE delta parsing operator precedence; connection test uses provider-correct auth headers
+- Corrupted localStorage no longer crashes startup; imports validated and deduplicated by id
+- Pet window: `currentMonitor()` was silently failing (wrong ground position on non-1920×1080 monitors); `setPosition` now uses `LogicalPosition` instances
+- Manual Gitee pull / file import now refresh the prompt list immediately
+
+### Changed
+- SettingsPanel split into `settings/AiTab` / `PetTab` / `SyncTab` (1145 → ~120-line container)
+- DesktopPet split into `usePetMovement` / `useContextSuggest` / `useFocusSync` composables (1026 → 225 lines)
+- Network search wired to the real f/awesome-chatgpt-prompts dataset (jsDelivr → GitHub raw → cache → offline fallback)
+
+---
+
 ## v1.1.0 (2026-05-26)
 
 ### Added

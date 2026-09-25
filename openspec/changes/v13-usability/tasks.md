@@ -34,6 +34,6 @@
 
 ## 5. 收尾：CI、版本与终验
 
-- [ ] 5.1 新建 `.github/workflows/ci.yml`：Node 22，`npm ci` → `tsc --noEmit` → `vite build` → `node scripts/test-pure.mjs`，push(main) 与 PR 触发——验证：GitHub Actions 首跑全绿
-- [ ] 5.2 版本对齐 1.3.0：package.json、README 徽章、CHANGELOG 补 v1.3.0 条目——验证：三处版本一致
+- [x] 5.1 新建 `.github/workflows/ci.yml`：Node 22，`npm ci` → `tsc --noEmit` → `vite build` → `node scripts/test-pure.mjs`，push(main) 与 PR 触发——验证：GitHub Actions 首跑全绿
+- [x] 5.2 版本对齐 1.3.0：package.json、README 徽章、CHANGELOG 补 v1.3.0 条目——验证：三处版本一致
 - [ ] 5.3 全量终验：对照三份 spec 逐条 scenario 过手测清单，全部通过后执行 `openspec archive`

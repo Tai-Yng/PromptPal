@@ -1,0 +1,262 @@
+/* Settings 面板共享样式 — 由 SettingsPanel 容器以全局方式引入，
+   三个 tab 子组件（AiTab/PetTab/SyncTab）共用；类名以 settings 面板为命名空间。 */
+
+/* ── Section ── */
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.section-label {
+  padding: 4px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-light);
+}
+.section-label.sub {
+  margin-top: 4px;
+  opacity: 0.5;
+}
+.sec-path {
+  font-size: 11px;
+  color: var(--terminal-green);
+  opacity: 0.7;
+  letter-spacing: 0.3px;
+}
+
+/* ── Config Rows ── */
+.cfg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cfg-key {
+  min-width: 100px;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  text-align: right;
+}
+.cfg-op {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.cfg-value {
+  flex: 1;
+}
+.cfg-input, .cfg-select {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all var(--transition-normal);
+}
+.cfg-input:focus, .cfg-select:focus {
+  border-color: var(--primary);
+  box-shadow: var(--glow-sm);
+}
+.cfg-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-left: 4px;
+}
+.cfg-sep {
+  color: var(--text-muted);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Buttons ── */
+.save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.save-btn, .load-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: 1px solid var(--terminal-green);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--terminal-green);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+.save-btn:hover {
+  background: var(--terminal-green);
+  color: var(--bg-primary);
+}
+.load-btn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.load-btn:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+.save-sym { opacity: 0.7; }
+.saved-msg {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--terminal-green);
+}
+.opt-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+.opt-btn:hover { border-color: var(--text-muted); color: var(--text-secondary); }
+.opt-btn.active {
+  border-color: var(--primary);
+  color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.08);
+}
+.opt-btn.del {
+  color: #FCA5A5;
+  border-color: rgba(239, 68, 68, 0.3);
+  margin-left: 6px;
+}
+.opt-btn.del:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+.toggle-char {
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  letter-spacing: 1px;
+}
+.toggle-char:hover { border-color: var(--text-muted); }
+.toggle-char.active {
+  color: var(--terminal-green);
+  border-color: var(--terminal-green);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+/* ── Status ── */
+.status-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+.status-msg.ok {
+  border-color: rgba(74, 222, 128, 0.2);
+  color: var(--terminal-green);
+}
+.status-prefix {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+/* ── Sync ── */
+.sync-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sync-path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sync-msg {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  margin-top: 8px;
+}
+.sync-msg.ok { color: var(--terminal-green); border: 1px solid rgba(74, 222, 128, 0.25); background: rgba(74, 222, 128, 0.06); }
+.sync-msg.err { color: #FCA5A5; border: 1px solid rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.06); }
+.sync-msg.warn { color: var(--warning); }
+.sync-file {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  opacity: 0.6;
+}
+.gh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border: 1px solid;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+.gh-btn.push {
+  border-color: #6E40C9;
+  color: #A78BFA;
+}
+.gh-btn.push:hover {
+  background: #6E40C9;
+  color: #fff;
+}
+.gh-btn.pull {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.gh-btn.pull:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+.gh-btn.verify {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.gh-btn.verify:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.sync-hint {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  opacity: 0.6;
+}
+.sync-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.sync-hint a:hover { text-decoration: underline; }
+.hint-icon { color: var(--warning); margin-right: 4px; }
+.hint-sub { opacity: 0.6; font-size: 9px; }
+
+/* ── Flash transition ── */
+.flash-enter-active, .flash-leave-active { transition: opacity 0.2s; }
+.flash-enter-from, .flash-leave-to { opacity: 0; }

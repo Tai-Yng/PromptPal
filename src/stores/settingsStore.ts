@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { loadJson, saveJson, ensureSchemaVersion, type Validator } from '../services/storage'
 
 export type AIProvider = 'openai' | 'deepseek' | 'claude' | 'custom'
 
@@ -99,42 +100,25 @@ export const useSettingsStore = defineStore('settings', () => {
     saveToStorage()
   }
 
-  // 保存到本地存储
+  // 保存到本地存储（经统一存储层）
   const saveToStorage = () => {
-    localStorage.setItem('promptpal_ai_config', JSON.stringify(aiConfig.value))
-    localStorage.setItem('promptpal_pet_config', JSON.stringify(petConfig.value))
-    localStorage.setItem('promptpal_shortcuts', JSON.stringify(shortcuts.value))
-    localStorage.setItem('promptpal_gitee_config', JSON.stringify(giteeConfig.value))
+    saveJson('promptpal_ai_config', aiConfig.value)
+    saveJson('promptpal_pet_config', petConfig.value)
+    saveJson('promptpal_shortcuts', shortcuts.value)
+    saveJson('promptpal_gitee_config', giteeConfig.value)
   }
+
+  // 保留"默认值合并"语义：存量数据缺字段时回落默认而非整体替换
+  const mergeValidator = <T extends object>(base: T): Validator<T> =>
+    (raw) => (raw && typeof raw === 'object' && !Array.isArray(raw)) ? { ...base, ...(raw as T) } : null
 
   // 从本地存储加载
   const loadFromStorage = () => {
-    const saved = localStorage.getItem('promptpal_ai_config')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        aiConfig.value = { ...aiConfig.value, ...parsed }
-      } catch {}
-    }
-    const savedPet = localStorage.getItem('promptpal_pet_config')
-    if (savedPet) {
-      try {
-        const parsed = JSON.parse(savedPet)
-        petConfig.value = { ...petConfig.value, ...parsed }
-      } catch {}
-    }
-    const savedShortcuts = localStorage.getItem('promptpal_shortcuts')
-    if (savedShortcuts) {
-      try {
-        shortcuts.value = JSON.parse(savedShortcuts)
-      } catch {}
-    }
-    const savedGitee = localStorage.getItem('promptpal_gitee_config')
-    if (savedGitee) {
-      try {
-        giteeConfig.value = { ...giteeConfig.value, ...JSON.parse(savedGitee) }
-      } catch {}
-    }
+    ensureSchemaVersion()
+    aiConfig.value = loadJson('promptpal_ai_config', aiConfig.value, mergeValidator(aiConfig.value))
+    petConfig.value = loadJson('promptpal_pet_config', petConfig.value, mergeValidator(petConfig.value))
+    shortcuts.value = loadJson('promptpal_shortcuts', shortcuts.value)
+    giteeConfig.value = loadJson('promptpal_gitee_config', giteeConfig.value, mergeValidator(giteeConfig.value))
   }
 
   // 快捷方式 CRUD

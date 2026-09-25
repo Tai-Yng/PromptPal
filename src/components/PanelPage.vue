@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import PromptPanel from './PromptPanel.vue'
 import AIGeneratePanel from './AIGeneratePanel.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import TodoPanel from './TodoPanel.vue'
+import { useSettingsStore } from '../stores/settingsStore'
+import { usePetStyleStore } from '../stores/petStyleStore'
+import { usePromptStore } from '../stores/promptStore'
+import { checkStartupSync, takeStartupCandidate, applyPulledData } from '../services/autoSync'
 
 const activeView = ref<'prompt' | 'ai' | 'todo' | 'settings'>('prompt')
 
@@ -13,10 +17,47 @@ const closePanelWindow = async () => {
     await getCurrentWindow().hide()
   } catch {}
 }
+
+// ===== 启动拉取：远端较新时询问 =====
+const settingsStore = useSettingsStore()
+const petStore = usePetStyleStore()
+const promptStore = usePromptStore()
+const pullBanner = ref<string | null>(null)
+let pullCandidate: any = null
+
+onMounted(async () => {
+  const result = await checkStartupSync()
+  if (result === 'confirm') {
+    pullCandidate = takeStartupCandidate()
+    const ts = pullCandidate?.exportedAt ? new Date(pullCandidate.exportedAt).toLocaleString() : 'unknown'
+    pullBanner.value = ts
+  }
+})
+
+const handlePullNow = () => {
+  pullBanner.value = null
+  if (!pullCandidate) return
+  applyPulledData(pullCandidate)
+  settingsStore.loadFromStorage()
+  promptStore.reloadFromStorage()
+  petStore.applyTheme(petStore.currentThemeId)
+  pullCandidate = null
+}
+const handleIgnorePull = () => {
+  pullBanner.value = null
+  pullCandidate = null
+}
 </script>
 
 <template>
   <div class="panel-page">
+    <!-- 启动拉取确认横幅 -->
+    <div v-if="pullBanner" class="pull-banner">
+      <span class="pull-text">[SYNC] remote data is newer (saved {{ pullBanner }})</span>
+      <button class="pull-btn yes" @click="handlePullNow">pull</button>
+      <button class="pull-btn no" @click="handleIgnorePull">ignore</button>
+    </div>
+
     <!-- 侧边导航 -->
     <nav class="sidebar">
       <div class="sidebar-header">
@@ -78,6 +119,36 @@ const closePanelWindow = async () => {
 </template>
 
 <style scoped>
+.pull-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--warning);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.pull-text { color: var(--warning); flex: 1; }
+.pull-btn {
+  padding: 3px 12px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.pull-btn.yes { border-color: var(--terminal-green); color: var(--terminal-green); }
+.pull-btn.yes:hover { background: var(--terminal-green); color: var(--bg-primary); }
+.pull-btn.no:hover { color: var(--text-primary); }
+
 .panel-page {
   display: flex;
   width: 100%;

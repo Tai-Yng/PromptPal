@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { loadJson, saveJson, ensureSchemaVersion, type Validator } from '../services/storage'
 
 // 桌宠样式配置
 export interface PetStyle {
@@ -216,25 +217,25 @@ export const usePetStyleStore = defineStore('petStyle', () => {
     saveToStorage()
   }
 
-  // 保存到本地存储
+  // 保存到本地存储（经统一存储层）
   const saveToStorage = () => {
-    localStorage.setItem('promptpal_pet_style', JSON.stringify({
+    saveJson('promptpal_pet_style', {
       style: currentStyle.value,
       themeId: currentThemeId.value,
       useCustomSprite: useCustomSprite.value
-    }))
+    })
   }
 
   // 从本地存储加载
   const loadFromStorage = () => {
-    const saved = localStorage.getItem('promptpal_pet_style')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        if (parsed.style) currentStyle.value = parsed.style
-        if (parsed.themeId) currentThemeId.value = parsed.themeId
-        if (parsed.useCustomSprite !== undefined) useCustomSprite.value = parsed.useCustomSprite
-      } catch {}
+    ensureSchemaVersion()
+    const validator: Validator<{ style?: PetStyle; themeId?: string; useCustomSprite?: boolean }> = (raw) =>
+      raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null
+    const parsed = loadJson('promptpal_pet_style', null, validator)
+    if (parsed) {
+      if (parsed.style) currentStyle.value = parsed.style
+      if (parsed.themeId) currentThemeId.value = parsed.themeId
+      if (parsed.useCustomSprite !== undefined) useCustomSprite.value = parsed.useCustomSprite
     }
   }
 

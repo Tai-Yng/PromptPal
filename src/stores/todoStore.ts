@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { loadJson, saveJson, ensureSchemaVersion } from '../services/storage'
 
 export interface TodoItem {
   id: string
@@ -193,34 +194,20 @@ export const useTodoStore = defineStore('todo', () => {
   }
 
   const save = () => {
-    localStorage.setItem('promptpal_todos', JSON.stringify(items.value))
-    localStorage.setItem('promptpal_todo_cats', JSON.stringify(categories.value))
-    localStorage.setItem('promptpal_plan_items', JSON.stringify(planItems.value))
-    localStorage.setItem('promptpal_focus_mode', JSON.stringify(focusMode.value))
-    localStorage.setItem('promptpal_focus_anim', JSON.stringify(focusAnim.value))
+    saveJson('promptpal_todos', items.value)
+    saveJson('promptpal_todo_cats', categories.value)
+    saveJson('promptpal_plan_items', planItems.value)
+    saveJson('promptpal_focus_mode', focusMode.value)
+    saveJson('promptpal_focus_anim', focusAnim.value)
   }
 
   const load = () => {
-    try {
-      const s = localStorage.getItem('promptpal_todos')
-      if (s) items.value = JSON.parse(s)
-    } catch {}
-    try {
-      const s = localStorage.getItem('promptpal_todo_cats')
-      if (s) categories.value = JSON.parse(s)
-    } catch {}
-    try {
-      const s = localStorage.getItem('promptpal_plan_items')
-      if (s) planItems.value = JSON.parse(s)
-    } catch {}
-    try {
-      const s = localStorage.getItem('promptpal_focus_mode')
-      if (s) focusMode.value = JSON.parse(s)
-    } catch {}
-    try {
-      const s = localStorage.getItem('promptpal_focus_anim')
-      if (s) focusAnim.value = JSON.parse(s) as 'complete' | 'celebrate' | null
-    } catch {}
+    ensureSchemaVersion()
+    items.value = loadJson('promptpal_todos', items.value)
+    categories.value = loadJson('promptpal_todo_cats', categories.value)
+    planItems.value = loadJson('promptpal_plan_items', planItems.value)
+    focusMode.value = loadJson('promptpal_focus_mode', focusMode.value)
+    focusAnim.value = loadJson('promptpal_focus_anim', focusAnim.value)
   }
 
   load()
@@ -233,22 +220,13 @@ export const useTodoStore = defineStore('todo', () => {
       if (e.key && e.key.startsWith('promptpal_')) {
         // 只重载 focus 和 plan 数据（其他数据 pet 窗口用不上）
         if (e.key === 'promptpal_focus_mode') {
-          try {
-            const s = localStorage.getItem('promptpal_focus_mode')
-            if (s !== null) focusMode.value = JSON.parse(s)
-          } catch {}
+          focusMode.value = loadJson('promptpal_focus_mode', focusMode.value)
         }
         if (e.key === 'promptpal_focus_anim') {
-          try {
-            const s = localStorage.getItem('promptpal_focus_anim')
-            if (s !== null) focusAnim.value = JSON.parse(s) as 'complete' | 'celebrate' | null
-          } catch {}
+          focusAnim.value = loadJson('promptpal_focus_anim', focusAnim.value)
         }
         if (e.key === 'promptpal_plan_items') {
-          try {
-            const s = localStorage.getItem('promptpal_plan_items')
-            if (s !== null) planItems.value = JSON.parse(s)
-          } catch {}
+          planItems.value = loadJson('promptpal_plan_items', planItems.value)
         }
       }
     })

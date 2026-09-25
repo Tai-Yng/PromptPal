@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Prompt, Category } from '../types'
 import { copyToClipboard as platformCopy } from '../services/platform'
+import { loadJson, saveJson, loadString, saveString, ensureSchemaVersion, type Validator } from '../services/storage'
 
 // 防抖自动导出到文件
 let autoExportTimer: number | null = null
@@ -11,11 +12,11 @@ const autoExport = () => {
     autoExportTimer = window.setTimeout(async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
-        const prompts = localStorage.getItem('promptpal_prompts') || '[]'
-        const categories = localStorage.getItem('promptpal_categories') || '[]'
-        const aiConfig = localStorage.getItem('promptpal_ai_config') || '{}'
-        const petConfig = localStorage.getItem('promptpal_pet_config') || '{}'
-        const petStyle = localStorage.getItem('promptpal_pet_style') || '{}'
+        const prompts = loadString('promptpal_prompts') || '[]'
+        const categories = loadString('promptpal_categories') || '[]'
+        const aiConfig = loadString('promptpal_ai_config') || '{}'
+        const petConfig = loadString('promptpal_pet_config') || '{}'
+        const petStyle = loadString('promptpal_pet_style') || '{}'
         await invoke('sync_save', {
           data: JSON.stringify({
             prompts, categories, aiConfig, petConfig, petStyle,
@@ -166,36 +167,33 @@ export const usePromptStore = defineStore('prompt', () => {
     }
   }
 
-  // 本地存储
+  // 本地存储（经统一存储层，数据损坏时回退默认值而不是崩溃）
+  const promptsValidator: Validator<Prompt[]> = (raw) => {
+    if (!Array.isArray(raw)) return null
+    return raw
+      .map((p: any, i: number) => sanitizePrompt(p, i))
+      .filter((p: Prompt | null): p is Prompt => p !== null)
+  }
+
+  const categoriesValidator: Validator<Category[]> = (raw) => {
+    if (!Array.isArray(raw) || raw.length === 0) return null
+    return raw.filter((c: any) => c && typeof c.id === 'string' && typeof c.name === 'string')
+  }
+
   const saveToLocalStorage = () => {
-    localStorage.setItem('promptpal_prompts', JSON.stringify(prompts.value))
-    localStorage.setItem('promptpal_categories', JSON.stringify(categories.value))
-    localStorage.setItem('promptpal_default_prompt_id', defaultPromptId.value || '')
+    saveJson('promptpal_prompts', prompts.value)
+    saveJson('promptpal_categories', categories.value)
+    saveString('promptpal_default_prompt_id', defaultPromptId.value || '')
     autoExport()
   }
 
   const loadFromLocalStorage = () => {
-    try {
-      const savedPrompts = localStorage.getItem('promptpal_prompts')
-      if (savedPrompts) {
-        prompts.value = JSON.parse(savedPrompts)
-          .map((p: any, i: number) => sanitizePrompt(p, i))
-          .filter((p: Prompt | null): p is Prompt => p !== null)
-      }
-      const savedCategories = localStorage.getItem('promptpal_categories')
-      if (savedCategories) {
-        const parsed = JSON.parse(savedCategories)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          categories.value = parsed.filter((c: any) => c && typeof c.id === 'string' && typeof c.name === 'string')
-        }
-      }
-      const savedDefaultId = localStorage.getItem('promptpal_default_prompt_id')
-      if (savedDefaultId) {
-        defaultPromptId.value = savedDefaultId
-      }
-    } catch (e) {
-      // 数据损坏：不抛出，保留空状态让应用可启动
-      console.error('Failed to load promptpal data:', e)
+    ensureSchemaVersion()
+    prompts.value = loadJson('promptpal_prompts', prompts.value, promptsValidator)
+    categories.value = loadJson('promptpal_categories', categories.value, categoriesValidator)
+    const savedDefaultId = loadString('promptpal_default_prompt_id')
+    if (savedDefaultId) {
+      defaultPromptId.value = savedDefaultId
     }
   }
 

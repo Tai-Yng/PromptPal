@@ -223,17 +223,14 @@ const testConnection = async () => {
   if (!store.isConfigured) return
   isTesting.value = true; testResult.value = null
   try {
-    const response = await fetch(store.aiConfig.apiUrl, {
+    // 复用 store 的请求构建：自动区分 Claude（x-api-key）与 OpenAI 兼容（Bearer）
+    const { url, headers, body } = store.buildChatRequest(store.aiConfig, 'generate', 'ping', false)
+    body.max_tokens = 5
+    body.messages = [{ role: 'user', content: 'ping' }]
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${store.aiConfig.apiKey}`
-      },
-      body: JSON.stringify({
-        model: store.aiConfig.model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 5
-      })
+      headers,
+      body: JSON.stringify(body)
     })
     if (response.ok) {
       testResult.value = { success: true, message: '[OK] connection established' }

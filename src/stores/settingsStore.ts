@@ -158,14 +158,13 @@ export const useSettingsStore = defineStore('settings', () => {
     saveToStorage()
   }
 
-  // AI生成Prompt
-  const generatePrompt = async (input: string, mode: 'generate' | 'optimize' = 'generate'): Promise<string> => {
-    if (!isConfigured.value) {
-      throw new Error('AI not configured')
-    }
-
-    const config = aiConfig.value
-
+  // 构建聊天补全请求（generatePrompt / generatePromptStream / 连接测试共用）
+  const buildChatRequest = (
+    config: AIConfig,
+    mode: 'generate' | 'optimize',
+    input: string,
+    stream: boolean
+  ): { url: string; headers: Record<string, string>; body: Record<string, unknown> } => {
     const systemPrompt = mode === 'generate'
       ? 'You are a prompt engineering expert. Generate a high-quality, detailed prompt based on the user\'s request. The prompt should be clear, specific, and optimized for AI tools like ChatGPT, Midjourney, or Claude.'
       : 'You are a prompt engineering expert. Optimize and improve the user\'s prompt to make it more effective, clear, and detailed. Fix any issues and enhance the prompt quality.'
@@ -174,41 +173,52 @@ export const useSettingsStore = defineStore('settings', () => {
       ? `Generate a professional prompt for: ${input}`
       : `Optimize this prompt:\n\n${input}`
 
-    // 根据不同提供商构建请求
-    let requestBody: any
-    let headers: Record<string, string> = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     }
 
+    let body: Record<string, unknown>
     if (config.provider === 'claude') {
+      // Claude Messages API：system 是顶层字段，不接受 role:'system' 消息
       headers['x-api-key'] = config.apiKey
       headers['anthropic-version'] = '2023-06-01'
-      requestBody = {
+      body = {
         model: config.model,
         max_tokens: 2000,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ]
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+        stream
       }
     } else {
       // OpenAI / DeepSeek / Custom (OpenAI compatible)
       headers['Authorization'] = `Bearer ${config.apiKey}`
-      requestBody = {
+      body = {
         model: config.model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.7,
-        max_tokens: 2000
+        max_tokens: 2000,
+        stream
       }
     }
+    return { url: config.apiUrl, headers, body }
+  }
 
-    const response = await fetch(config.apiUrl, {
+  // AI生成Prompt
+  const generatePrompt = async (input: string, mode: 'generate' | 'optimize' = 'generate'): Promise<string> => {
+    if (!isConfigured.value) {
+      throw new Error('AI not configured')
+    }
+
+    const config = aiConfig.value
+    const { url, headers, body } = buildChatRequest(config, mode, input, false)
+
+    const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(body)
     })
 
     if (!response.ok) {
@@ -220,7 +230,10 @@ export const useSettingsStore = defineStore('settings', () => {
 
     // 解析不同格式的响应
     if (config.provider === 'claude') {
-      return data.content?.[0]?.text || ''
+      // content 是内容块数组，取所有 text 块拼接
+      return Array.isArray(data.content)
+        ? data.content.map((b: { text?: string }) => b?.text || '').join('')
+        : ''
     } else {
       return data.choices?.[0]?.message?.content || ''
     }
@@ -240,50 +253,12 @@ export const useSettingsStore = defineStore('settings', () => {
     }
 
     const config = aiConfig.value
+    const { url, headers, body } = buildChatRequest(config, mode, input, true)
 
-    const systemPrompt = mode === 'generate'
-      ? 'You are a prompt engineering expert. Generate a high-quality, detailed prompt based on the user\'s request. The prompt should be clear, specific, and optimized for AI tools like ChatGPT, Midjourney, or Claude.'
-      : 'You are a prompt engineering expert. Optimize and improve the user\'s prompt to make it more effective, clear, and detailed. Fix any issues and enhance the prompt quality.'
-
-    const userPrompt = mode === 'generate'
-      ? `Generate a professional prompt for: ${input}`
-      : `Optimize this prompt:\n\n${input}`
-
-    let requestBody: any
-    let headers: Record<string, string> = {
-      'Content-Type': 'application/json'
-    }
-
-    if (config.provider === 'claude') {
-      headers['x-api-key'] = config.apiKey
-      headers['anthropic-version'] = '2023-06-01'
-      requestBody = {
-        model: config.model,
-        max_tokens: 2000,
-        stream: true,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ]
-      }
-    } else {
-      headers['Authorization'] = `Bearer ${config.apiKey}`
-      requestBody = {
-        model: config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000,
-        stream: true
-      }
-    }
-
-    const response = await fetch(config.apiUrl, {
+    const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(body)
     })
 
     if (!response.ok) {
@@ -315,7 +290,13 @@ export const useSettingsStore = defineStore('settings', () => {
           const json = JSON.parse(trimmed.slice(6))
           let token = ''
           if (config.provider === 'claude') {
-            token = json.delta?.text || json.type === 'content_block_delta' ? json.delta?.text : ''
+            if (json.type === 'error') {
+              throw new Error(json.error?.message || 'stream error')
+            }
+            // 只取 text_delta 事件中的文本
+            token = json.type === 'content_block_delta' && json.delta?.type === 'text_delta'
+              ? (json.delta?.text || '')
+              : ''
           } else {
             token = json.choices?.[0]?.delta?.content || ''
           }
@@ -323,8 +304,9 @@ export const useSettingsStore = defineStore('settings', () => {
             fullResponse += token
             onToken(token)
           }
-        } catch {
-          // 跳过非JSON行
+        } catch (e) {
+          // 解析失败则跳过非JSON行，但 stream error 要抛出
+          if (e instanceof Error && e.message === 'stream error') throw e
         }
       }
     }
@@ -354,6 +336,7 @@ export const useSettingsStore = defineStore('settings', () => {
     addShortcut,
     updateShortcut,
     deleteShortcut,
+    buildChatRequest,
     generatePrompt,
     generatePromptStream
   }

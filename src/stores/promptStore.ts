@@ -137,20 +137,8 @@ export const usePromptStore = defineStore('prompt', () => {
   }
 
   const copyToClipboard = async (content: string) => {
-    try {
-      return await platformCopy(content)
-    } catch {
-      // 降级方案
-      const textarea = document.createElement('textarea')
-      textarea.value = content
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      const success = document.execCommand('copy')
-      document.body.removeChild(textarea)
-      return success
-    }
+    // platform 层已含 navigator.clipboard → execCommand 完整降级链
+    return platformCopy(content)
   }
 
   // 设置默认提示词
@@ -158,6 +146,23 @@ export const usePromptStore = defineStore('prompt', () => {
     if (id === null || prompts.value.find(p => p.id === id)) {
       defaultPromptId.value = id
       saveToLocalStorage()
+    }
+  }
+
+  // 校验并规整单条提示词（损坏数据不应让应用启动失败）
+  const sanitizePrompt = (raw: any, index: number): Prompt | null => {
+    if (!raw || typeof raw !== 'object' || typeof raw.content !== 'string') return null
+    return {
+      id: typeof raw.id === 'string' && raw.id ? raw.id : `recovered-${Date.now()}-${index}`,
+      title: typeof raw.title === 'string' && raw.title ? raw.title : 'Untitled',
+      content: raw.content,
+      category: typeof raw.category === 'string' ? raw.category : 'other',
+      tags: Array.isArray(raw.tags) ? raw.tags.filter((t: unknown) => typeof t === 'string') : [],
+      source: raw.source === 'network' ? 'network' : 'local',
+      favorite: !!raw.favorite,
+      useCount: typeof raw.useCount === 'number' && Number.isFinite(raw.useCount) ? raw.useCount : 0,
+      createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+      updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now()
     }
   }
 
@@ -170,18 +175,27 @@ export const usePromptStore = defineStore('prompt', () => {
   }
 
   const loadFromLocalStorage = () => {
-    const savedPrompts = localStorage.getItem('promptpal_prompts')
-    const savedCategories = localStorage.getItem('promptpal_categories')
-    const savedDefaultId = localStorage.getItem('promptpal_default_prompt_id')
-
-    if (savedPrompts) {
-      prompts.value = JSON.parse(savedPrompts)
-    }
-    if (savedCategories) {
-      categories.value = JSON.parse(savedCategories)
-    }
-    if (savedDefaultId) {
-      defaultPromptId.value = savedDefaultId
+    try {
+      const savedPrompts = localStorage.getItem('promptpal_prompts')
+      if (savedPrompts) {
+        prompts.value = JSON.parse(savedPrompts)
+          .map((p: any, i: number) => sanitizePrompt(p, i))
+          .filter((p: Prompt | null): p is Prompt => p !== null)
+      }
+      const savedCategories = localStorage.getItem('promptpal_categories')
+      if (savedCategories) {
+        const parsed = JSON.parse(savedCategories)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          categories.value = parsed.filter((c: any) => c && typeof c.id === 'string' && typeof c.name === 'string')
+        }
+      }
+      const savedDefaultId = localStorage.getItem('promptpal_default_prompt_id')
+      if (savedDefaultId) {
+        defaultPromptId.value = savedDefaultId
+      }
+    } catch (e) {
+      // 数据损坏：不抛出，保留空状态让应用可启动
+      console.error('Failed to load promptpal data:', e)
     }
   }
 
@@ -196,12 +210,25 @@ export const usePromptStore = defineStore('prompt', () => {
   }
 
   const importData = (data: { prompts: Prompt[], categories?: Category[], defaultPromptId?: string | null }) => {
-    prompts.value = data.prompts
-    if (data.categories) {
+    if (!data || !Array.isArray(data.prompts)) {
+      throw new Error('Invalid data format: prompts array expected')
+    }
+    // 校验并按 id 去重（后出现的覆盖先出现的）
+    const byId = new Map<string, Prompt>()
+    data.prompts.forEach((p: any, i: number) => {
+      const sanitized = sanitizePrompt(p, i)
+      if (sanitized) byId.set(sanitized.id, sanitized)
+    })
+    prompts.value = [...byId.values()]
+    if (data.categories && Array.isArray(data.categories)) {
       categories.value = data.categories
     }
     if (data.defaultPromptId !== undefined) {
       defaultPromptId.value = data.defaultPromptId
+    }
+    // 校验默认提示词仍然存在
+    if (defaultPromptId.value && !byId.has(defaultPromptId.value)) {
+      defaultPromptId.value = prompts.value.length > 0 ? prompts.value[0].id : null
     }
     saveToLocalStorage()
   }

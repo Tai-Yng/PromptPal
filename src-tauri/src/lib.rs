@@ -59,6 +59,45 @@ fn sync_load() -> Result<String, String> {
     }
 }
 
+/// 推送前备份本地数据文件（带时间戳，滚动保留最近 5 份）
+#[tauri::command]
+fn backup_data_file() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let dir = home.join(".promptpal");
+    let src = dir.join("promptpal_data.json");
+    if !src.exists() {
+        return Err("data file not found".into());
+    }
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let dst = dir.join(format!("promptpal_data.backup-{}.json", ts));
+    std::fs::copy(&src, &dst).map_err(|e| format!("Failed to copy: {}", e))?;
+
+    // 滚动清理：只保留最近 5 份备份（文件名含秒级时间戳，字典序即时间序）
+    const KEEP: usize = 5;
+    let mut backups: Vec<std::path::PathBuf> = match std::fs::read_dir(&dir) {
+        Ok(rd) => rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| n.starts_with("promptpal_data.backup-") && n.ends_with(".json"))
+                    .unwrap_or(false)
+            })
+            .collect(),
+        Err(e) => return Err(format!("Failed to read dir: {}", e)),
+    };
+    if backups.len() > KEEP {
+        backups.sort();
+        for p in &backups[..backups.len() - KEEP] {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    Ok(dst.to_string_lossy().to_string())
+}
+
 /// Gitee API: 检查连接
 #[tauri::command]
 fn gitee_verify(token: String, owner: String, repo: String) -> Result<String, String> {
@@ -283,6 +322,7 @@ pub fn run() {
         show_context_menu,
         sync_save,
         sync_load,
+        backup_data_file,
         gitee_verify,
         gitee_push,
         gitee_pull,

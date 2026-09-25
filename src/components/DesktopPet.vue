@@ -8,6 +8,7 @@ import { useTodoStore } from '../stores/todoStore'
 import { usePetMovement } from '../composables/usePetMovement'
 import { useContextSuggest } from '../composables/useContextSuggest'
 import { useFocusSync } from '../composables/useFocusSync'
+import { exitApp } from '../services/autoSync'
 import { loadJson, loadString } from '../services/storage'
 
 const petStore = usePetStyleStore()
@@ -122,7 +123,7 @@ const openPanel = () => {
 
 const quitApp = () => {
   closeContextMenu()
-  invoke('exit_app').catch(() => {})
+  exitApp().catch(() => {})
 }
 
 // ============ 生命周期 ============

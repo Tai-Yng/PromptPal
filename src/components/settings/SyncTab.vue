@@ -3,10 +3,16 @@ import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { usePetStyleStore } from '../../stores/petStyleStore'
-import { loadString, saveString, loadJson, saveJson } from '../../services/storage'
+import { usePromptStore } from '../../stores/promptStore'
+import { loadString, saveString } from '../../services/storage'
+import {
+  buildExportData, pushToGitee, applyPulledData, fromBase64Utf8,
+  markPushed, autoSyncHealth
+} from '../../services/autoSync'
 
 const store = useSettingsStore()
 const petStore = usePetStyleStore()
+const promptStore = usePromptStore()
 
 const syncMsg = ref('')
 const syncPath = ref('')
@@ -74,6 +80,7 @@ const handleSyncLoad = () => {
       if (data.petConfig) saveString('promptpal_pet_config', data.petConfig)
       if (data.petStyle) saveString('promptpal_pet_style', data.petStyle)
       store.loadFromStorage()
+      promptStore.reloadFromStorage()
       petStore.applyTheme(petStore.currentThemeId)
       syncPath.value = file.name
       syncMsg.value = `[OK] imported from ${file.name}${data.exportedAt ? ` (saved ${new Date(data.exportedAt).toLocaleString()})` : ''}`
@@ -102,24 +109,6 @@ const giteeVerify = async () => {
   }
 }
 
-// 安全的 UTF-8 → Base64 编码（支持中文）
-const toBase64Utf8 = (str: string): string => {
-  const bytes = new TextEncoder().encode(str)
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-  return btoa(binary)
-}
-
-// 安全的 Base64 → UTF-8 解码（支持中文）
-const fromBase64Utf8 = (b64: string): string => {
-  // Gitee 返回的 base64 可能有换行符，先清除
-  const clean = b64.replace(/\s/g, '')
-  const binary = atob(clean)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return new TextDecoder('utf-8').decode(bytes)
-}
-
 const giteePush = async () => {
   syncGiteeToStore()
   if (!giteeToken.value || !giteeOwner.value || !giteeRepo.value) {
@@ -128,26 +117,17 @@ const giteePush = async () => {
   }
   giteeSyncMsg.value = 'pushing...'
   try {
-    const data: any = {}
-    const prompts = loadJson('promptpal_prompts', null)
-    if (prompts) data.prompts = prompts
-    const cats = loadJson('promptpal_categories', null)
-    if (cats) data.categories = cats
-    const style = loadJson('promptpal_pet_style', null)
-    if (style) data.petStyle = style
-    data.exportedAt = new Date().toISOString()
-
-    // 正确的 UTF-8 → Base64 编码，支持中文
-    const jsonStr = JSON.stringify(data, null, 2)
-    const content = toBase64Utf8(jsonStr)
-
-    const result = await invoke('gitee_push', {
+    // 推送前先做本地滚动备份
+    await invoke('backup_data_file').catch(() => {})
+    const cfg = {
       token: giteeToken.value,
       owner: giteeOwner.value,
       repo: giteeRepo.value,
       path: giteePath.value || 'promptpal_data.json',
-      content
-    })
+      enabled: true
+    }
+    const result = await pushToGitee(cfg, buildExportData())
+    markPushed()
     giteeSyncMsg.value = result as string
   } catch (e: any) {
     giteeSyncMsg.value = `[ERR] ${String(e)}`
@@ -170,17 +150,13 @@ const giteePull = async () => {
     }) as string
 
     const fileData = JSON.parse(json)
-
-    // 使用正确的 UTF-8 Base64 解码
     const base64Content = fileData.content
     if (!base64Content) throw new Error('empty content from Gitee')
-    const decodedStr = fromBase64Utf8(base64Content)
+    const decoded = JSON.parse(fromBase64Utf8(base64Content))
 
-    const decoded = JSON.parse(decodedStr)
-    if (decoded.prompts) saveJson('promptpal_prompts', decoded.prompts)
-    if (decoded.categories) saveJson('promptpal_categories', decoded.categories)
-    if (decoded.petStyle) saveJson('promptpal_pet_style', decoded.petStyle)
+    applyPulledData(decoded)
     store.loadFromStorage()
+    promptStore.reloadFromStorage()
     petStore.applyTheme(petStore.currentThemeId)
     const ts = decoded.exportedAt ? new Date(decoded.exportedAt).toLocaleString() : 'unknown'
     giteeSyncMsg.value = `[OK] pulled from ${giteeOwner.value}/${giteeRepo.value} (saved at ${ts})`
@@ -227,10 +203,15 @@ const giteePull = async () => {
       {{ syncMsg }}
     </div>
 
-    <!-- Gitee -->
-    <div class="section-label sub">
-      <span class="sec-path">-- gitee --</span>
-    </div>
+        <!-- 自动同步健康告警（连续推送失败时显示） -->
+        <div v-if="autoSyncHealth.failing" class="sync-msg warn">
+          [WARN] auto-push failing: {{ autoSyncHealth.lastError }}
+        </div>
+
+        <!-- Gitee -->
+        <div class="section-label sub">
+          <span class="sec-path">-- gitee --</span>
+        </div>
 
     <div class="cfg-row">
       <span class="cfg-key">token</span>

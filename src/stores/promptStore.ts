@@ -23,6 +23,9 @@ const autoExport = () => {
             exportedAt: new Date().toISOString()
           })
         })
+        // 数据已变更：通知 Gitee 自动同步（60s 防抖，未启用则内部直接跳过）
+        const { notifyDataChanged } = await import('../services/autoSync')
+        notifyDataChanged()
       } catch { /* ignore */ }
     }, 2000)
   }
@@ -292,6 +295,7 @@ export const usePromptStore = defineStore('prompt', () => {
     copyToClipboard,
     setDefaultPrompt,
     exportData,
-    importData
+    importData,
+    reloadFromStorage: loadFromLocalStorage
   }
 })

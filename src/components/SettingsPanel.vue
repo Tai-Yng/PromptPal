@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import { exitApp } from '../services/autoSync'
 import AiTab from './settings/AiTab.vue'
 import PetTab from './settings/PetTab.vue'
 import SyncTab from './settings/SyncTab.vue'
@@ -38,7 +38,7 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
 
       <!-- Exit -->
       <div class="exit-row">
-        <button class="exit-btn" @click="invoke('exit_app').catch(() => {})">
+        <button class="exit-btn" @click="exitApp().catch(() => {})">
           <span class="exit-sym">x</span> exit PromptPal
         </button>
       </div>

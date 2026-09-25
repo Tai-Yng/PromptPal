@@ -1,31 +1,48 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { usePromptStore } from '../stores/promptStore'
+import { loadJson, loadString } from '../services/storage'
+import { parseVariables } from '../services/variables'
+import VariableFillDialog from './VariableFillDialog.vue'
 
 const store = usePromptStore()
 const searchQuery = ref('')
 const selectedIndex = ref(0)
 const searchInputRef = ref<HTMLInputElement | null>(null)
+const fillPrompt = ref<any>(null)
 
-// 从 localStorage 同步最新数据
+// 分类色点（与 PromptCard 一致）
+const catColors: Record<string, string> = {
+  chat: '#818CF8',
+  image: '#A78BFA',
+  code: '#22D3EE',
+  writing: '#F59E0B',
+  other: '#6B7280'
+}
+const catColor = (category: string) => catColors[category] || '#6B7280'
+
+// 从 localStorage 同步最新数据（跨窗口）
 onMounted(() => {
-  try {
-    const saved = localStorage.getItem('promptpal_prompts')
-    if (saved) store.prompts = JSON.parse(saved)
-    const defId = localStorage.getItem('promptpal_default_prompt_id')
-    if (defId) store.defaultPromptId = defId
-  } catch {}
+  store.prompts = loadJson('promptpal_prompts', store.prompts)
+  const defId = loadString('promptpal_default_prompt_id')
+  if (defId) store.defaultPromptId = defId
   searchInputRef.value?.focus()
 })
 
+// 搜索输入变化时选中位归零
+watch(searchQuery, () => { selectedIndex.value = 0 })
+
 const filteredPrompts = computed(() => {
+  // 收藏优先 → useCount 降序
+  const sorted = [...store.prompts].sort((a, b) =>
+    (Number(b.favorite) - Number(a.favorite)) || (b.useCount - a.useCount)
+  )
   if (!searchQuery.value.trim()) {
-    return store.prompts.slice(0, 8)
+    return sorted.slice(0, 8)
   }
   const q = searchQuery.value.toLowerCase()
-  return store.prompts.filter(p =>
+  return sorted.filter(p =>
     p.title.toLowerCase().includes(q) ||
     p.content.toLowerCase().includes(q) ||
     p.tags.some(t => t.toLowerCase().includes(q))
@@ -34,8 +51,9 @@ const filteredPrompts = computed(() => {
 
 const visibleCount = computed(() => Math.max(1, filteredPrompts.value.length))
 
-// 键盘导航
+// 键盘导航（填空弹窗打开时让位给弹窗自己处理）
 const handleKeyDown = async (e: KeyboardEvent) => {
+  if (fillPrompt.value) return
   if (e.key === 'ArrowDown') {
     e.preventDefault()
     selectedIndex.value = (selectedIndex.value + 1) % visibleCount.value
@@ -53,19 +71,49 @@ const handleKeyDown = async (e: KeyboardEvent) => {
   }
 }
 
-// 选中并复制 → 关闭窗口
-const handleSelect = async (prompt: any) => {
-  // 写入剪贴板
+// 复制到剪贴板
+const writeClipboard = async (text: string) => {
   try {
     const { writeText } = await import('@tauri-apps/plugin-clipboard-manager')
-    await writeText(prompt.content)
+    await writeText(text)
+    return true
   } catch {
-    await navigator.clipboard.writeText(prompt.content)
+    await navigator.clipboard.writeText(text)
+    return true
   }
-  // 更新使用次数
-  store.incrementUseCount(prompt.id)
-  // 关闭窗口
+}
+
+const closeWindow = async () => {
   await invoke('quick_inject_done').catch(() => {})
+}
+
+// 选中：含变量 → 弹填空；无变量 → 复制并关窗
+const handleSelect = async (prompt: any) => {
+  if (parseVariables(String(prompt?.content ?? '')).length > 0) {
+    fillPrompt.value = prompt
+    return
+  }
+  await writeClipboard(prompt.content)
+  store.incrementUseCount(prompt.id)
+  await closeWindow()
+}
+
+const handleFillConfirm = async (text: string) => {
+  const p = fillPrompt.value
+  fillPrompt.value = null
+  if (!p) return
+  await writeClipboard(text)
+  store.incrementUseCount(p.id)
+  await closeWindow()
+}
+
+const handleCopyOriginal = async () => {
+  const p = fillPrompt.value
+  fillPrompt.value = null
+  if (!p) return
+  await writeClipboard(p.content)
+  store.incrementUseCount(p.id)
+  await closeWindow()
 }
 
 onMounted(() => { window.addEventListener('keydown', handleKeyDown) })
@@ -100,10 +148,12 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
         @mouseenter="selectedIndex = idx"
       >
         <span class="qi-idx">{{ idx + 1 }}</span>
+        <span class="qi-dot" :style="{ background: catColor(prompt.category) }"></span>
         <div class="qi-info">
           <span class="qi-title">
             <span class="qi-prompt">&gt;</span>
             {{ prompt.title }}
+            <span v-if="prompt.favorite" class="qi-fav">*</span>
           </span>
           <span class="qi-tags">
             <span v-for="tag in prompt.tags.slice(0, 3)" :key="tag" class="tag">{{ tag }}</span>
@@ -124,6 +174,17 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
       <span class="footer-key">&crarr;</span> select
       <span class="footer-key">Esc</span> close
     </div>
+
+    <!-- 变量填空弹窗 -->
+    <VariableFillDialog
+      v-if="fillPrompt"
+      :prompt-id="fillPrompt.id"
+      :title="fillPrompt.title"
+      :content="fillPrompt.content"
+      @confirm="handleFillConfirm"
+      @copy-original="handleCopyOriginal"
+      @close="fillPrompt = null"
+    />
   </div>
 </template>
 
@@ -193,6 +254,14 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
   flex-shrink: 0;
 }
 
+.qi-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .qi-info {
   flex: 1;
   min-width: 0;
@@ -215,6 +284,11 @@ onUnmounted(() => { window.removeEventListener('keydown', handleKeyDown) })
 .qi-prompt {
   color: var(--terminal-green);
   font-size: 10px;
+  flex-shrink: 0;
+}
+.qi-fav {
+  color: var(--warning);
+  font-size: 11px;
   flex-shrink: 0;
 }
 

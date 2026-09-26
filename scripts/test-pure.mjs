@@ -89,15 +89,31 @@ console.log('storage.ts:')
 
   await test('ensureSchemaVersion 写入当前版本且幂等', () => {
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '1')
+    assert.equal(storage.loadString('promptpal_schema_version'), '2')
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '1')
+    assert.equal(storage.loadString('promptpal_schema_version'), '2')
   })
 
   await test('损坏的版本号被纠正', () => {
     storage.saveString('promptpal_schema_version', 'garbage')
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '1')
+    assert.equal(storage.loadString('promptpal_schema_version'), '2')
+  })
+
+  await test('v1 数据经迁移链升到 v2 且内容无损', () => {
+    globalThis.localStorage = new MemStore()
+    const oldStyle = JSON.stringify({ style: { primaryColor: '#00D4AA' }, themeId: 'cyan', useCustomSprite: false })
+    globalThis.localStorage.setItem('promptpal_pet_style', oldStyle)
+    storage.saveString('promptpal_schema_version', '1')
+    storage.ensureSchemaVersion()
+    assert.equal(storage.loadString('promptpal_schema_version'), '2')
+    assert.equal(globalThis.localStorage.getItem('promptpal_pet_style'), oldStyle)
+  })
+
+  await test('全新环境直接升到当前版本', () => {
+    globalThis.localStorage = new MemStore()
+    storage.ensureSchemaVersion()
+    assert.equal(storage.loadString('promptpal_schema_version'), '2')
   })
 }
 

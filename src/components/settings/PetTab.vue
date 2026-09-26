@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { usePetStyleStore, presetThemes, type SpriteFrameMap, type SpriteFrameRate } from '../../stores/petStyleStore'
 import { isTauri } from '../../services/platform'
-import { stitchFrames } from '../../services/spriteStitch'
+import { stitchFrames, stitchFromZip } from '../../services/spriteStitch'
 
 const store = useSettingsStore()
 const petStore = usePetStyleStore()
@@ -16,6 +16,10 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const importing = ref(false)
 const importError = ref('')
 const pending = ref<{ dataUrl: string; base64: string; path: string } | null>(null)
+// ZIP+XML 自动映射的帧列表（enable 时优先于手填区间写入）
+const autoWalk = ref<number[] | undefined>(undefined)
+const autoIdle = ref<number[] | undefined>(undefined)
+const autoSleep = ref<number[] | undefined>(undefined)
 
 const fw = ref(32)
 const fh = ref(32)
@@ -33,12 +37,63 @@ const rate = ref<SpriteFrameRate>(8)
 const pickFile = () => fileInputRef.value?.click()
 
 // 多选导入：散帧 PNG（Shimeji img/ 目录全选）→ 自动横向拼条 + 预填参数
+// 导入分流：ZIP 整包（自动映射）/ 多选散帧 PNG（手填）
 const handleFile = async (e: Event) => {
   const input = e.target as HTMLInputElement
   const files = Array.from(input.files || [])
   input.value = ''
   if (files.length === 0) return
   importError.value = ''
+  if (files.length === 1 && /\.zip$/i.test(files[0].name)) {
+    await importZip(files[0])
+    return
+  }
+  await importFrames(files)
+}
+
+const importZip = async (file: File) => {
+  if (file.size > 50 * 1024 * 1024) {
+    importError.value = `[ERR] zip ${(file.size / 1024 / 1024).toFixed(0)}MB > 50MB`
+    return
+  }
+  importing.value = true
+  try {
+    const buf = await file.arrayBuffer()
+    const stitched = await stitchFromZip(buf)
+    const outBytes = Math.ceil(stitched.dataUrl.length * 0.75)
+    if (outBytes > MAX_SPRITE_BYTES) {
+      importError.value = `[ERR] stitched sheet ${(outBytes / 1024 / 1024).toFixed(1)}MB > 5MB — use fewer frames`
+      return
+    }
+    const base64 = stitched.dataUrl.split(',')[1] || ''
+    let path = ''
+    if (isTauri()) {
+      path = await invoke<string>('save_pet_sprite', { data: base64 })
+    }
+    pending.value = { dataUrl: stitched.dataUrl, base64, path }
+    fw.value = stitched.frameWidth
+    fh.value = stitched.frameHeight
+    frames.value = stitched.frames
+    // XML 自动映射命中：预填帧列表（用户可改）；未命中回落 walk 全帧
+    const am = stitched.autoMapping
+    walkStart.value = am?.walk?.[0] ?? 1
+    walkCount.value = am?.walk ? am.walk[am.walk.length - 1] - am.walk[0] + 1 : stitched.frames
+    autoWalk.value = am?.walk
+    autoIdle.value = am?.idle
+    autoSleep.value = am?.sleep
+    idleEnabled.value = !!am?.idle
+    sleepEnabled.value = !!am?.sleep
+    if (am?.idle) { idleStart.value = Math.min(...am.idle); idleCount.value = Math.max(...am.idle) - Math.min(...am.idle) + 1 }
+    if (am?.sleep) { sleepStart.value = Math.min(...am.sleep); sleepCount.value = Math.max(...am.sleep) - Math.min(...am.sleep) + 1 }
+    if (!am) importError.value = ''
+  } catch (err: any) {
+    importError.value = `[ERR] ${String(err).slice(0, 80)}`
+  } finally {
+    importing.value = false
+  }
+}
+
+const importFrames = async (files: File[]) => {
   for (const f of files) {
     if (!['image/png', 'image/webp'].includes(f.type)) {
       importError.value = `[ERR] ${f.name}: only PNG / WebP`
@@ -49,7 +104,6 @@ const handleFile = async (e: Event) => {
       return
     }
   }
-  importing.value = true
   try {
     const dataUrls = await Promise.all(files.map(f => new Promise<string>((res, rej) => {
       const r = new FileReader()
@@ -90,6 +144,9 @@ const handleFile = async (e: Event) => {
     frames.value = stitched.frames
     walkStart.value = 1
     walkCount.value = stitched.frames
+    autoWalk.value = undefined
+    autoIdle.value = undefined
+    autoSleep.value = undefined
     idleEnabled.value = false
     sleepEnabled.value = false
   } catch (err: any) {
@@ -110,9 +167,22 @@ const clampRange = (start: number, count: number) => {
 }
 
 const buildFrameMap = (): SpriteFrameMap => {
-  const map: SpriteFrameMap = { walk: clampRange(walkStart.value, walkCount.value) }
-  if (idleEnabled.value) map.idle = clampRange(idleStart.value, idleCount.value)
-  if (sleepEnabled.value) map.sleep = clampRange(sleepStart.value, sleepCount.value)
+  // 自动映射的帧列表优先（ZIP+XML 来源）；手填区间兜底
+  const map: SpriteFrameMap = {
+    walk: autoWalk.value && autoWalk.value.length > 0
+      ? { start: autoWalk.value[0], count: 1, frames: [...autoWalk.value] }
+      : clampRange(walkStart.value, walkCount.value)
+  }
+  if (idleEnabled.value) {
+    map.idle = autoIdle.value && autoIdle.value.length > 0
+      ? { start: autoIdle.value[0], count: 1, frames: [...autoIdle.value] }
+      : clampRange(idleStart.value, idleCount.value)
+  }
+  if (sleepEnabled.value) {
+    map.sleep = autoSleep.value && autoSleep.value.length > 0
+      ? { start: autoSleep.value[0], count: 1, frames: [...autoSleep.value] }
+      : clampRange(sleepStart.value, sleepCount.value)
+  }
   return map
 }
 
@@ -188,7 +258,7 @@ const previewStyle = computed(() => pending.value ? ({
         <input
           ref="fileInputRef"
           type="file"
-          accept="image/png,image/webp"
+          accept="image/png,image/webp,.zip"
           multiple
           style="display: none"
           @change="handleFile"
@@ -207,7 +277,7 @@ const previewStyle = computed(() => pending.value ? ({
         <!-- 未启用：导入 + 配置表单 -->
         <template v-else>
           <button class="sprite-btn" :disabled="importing" @click="pickFile">
-            <span class="btn-sym">$</span> {{ importing ? 'stitching...' : 'import frames — multi-select PNGs (Shimeji img/ all-select, sheet ≤ 5MB)' }}
+            <span class="btn-sym">$</span> {{ importing ? 'stitching...' : 'import ZIP pack (auto frame mapping) or multi-select PNGs' }}
           </button>
           <div v-if="importError" class="sprite-err">{{ importError }}</div>
 

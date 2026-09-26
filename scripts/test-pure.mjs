@@ -41,9 +41,11 @@ const bundle = (entry, out) => {
 
 let storageUrl = null
 let variablesUrl = null
+let xmlUrl = null
 try {
   storageUrl = bundle('src/services/storage.ts', 'storage.mjs')
   variablesUrl = bundle('src/services/variables.ts', 'variables.mjs')
+  xmlUrl = bundle('src/services/shimejiXml.ts', 'shimejiXml.mjs')
 } catch (e) {
   console.error('[FAIL] esbuild bundle:', e?.message || e)
   process.exit(1)
@@ -89,31 +91,31 @@ console.log('storage.ts:')
 
   await test('ensureSchemaVersion 写入当前版本且幂等', () => {
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '2')
+    assert.equal(storage.loadString('promptpal_schema_version'), '3')
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '2')
+    assert.equal(storage.loadString('promptpal_schema_version'), '3')
   })
 
   await test('损坏的版本号被纠正', () => {
     storage.saveString('promptpal_schema_version', 'garbage')
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '2')
+    assert.equal(storage.loadString('promptpal_schema_version'), '3')
   })
 
-  await test('v1 数据经迁移链升到 v2 且内容无损', () => {
+  await test('v1 数据经迁移链升到当前版本且内容无损', () => {
     globalThis.localStorage = new MemStore()
     const oldStyle = JSON.stringify({ style: { primaryColor: '#00D4AA' }, themeId: 'cyan', useCustomSprite: false })
     globalThis.localStorage.setItem('promptpal_pet_style', oldStyle)
     storage.saveString('promptpal_schema_version', '1')
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '2')
+    assert.equal(storage.loadString('promptpal_schema_version'), '3')
     assert.equal(globalThis.localStorage.getItem('promptpal_pet_style'), oldStyle)
   })
 
   await test('全新环境直接升到当前版本', () => {
     globalThis.localStorage = new MemStore()
     storage.ensureSchemaVersion()
-    assert.equal(storage.loadString('promptpal_schema_version'), '2')
+    assert.equal(storage.loadString('promptpal_schema_version'), '3')
   })
 }
 
@@ -182,6 +184,58 @@ console.log('variables.ts:')
     assert.ok(!keys.includes('p::v1'), '最旧的 v1 应被淘汰')
     assert.ok(keys.includes('p::v0'), '被标记为最新的 v0 应保留')
     assert.ok(keys.includes('p::v-new'), '最新条目应保留')
+  })
+}
+
+// ===== shimejiXml.ts =====
+console.log('shimejiXml.ts:')
+{
+  const xml = await import(xmlUrl)
+
+  // 真实皮卡丘包（Group-Finity 日文）样例片段
+  const jpXml = `<マスコット>
+  <動作 名前="振り向く" 種類="組み込み" クラス="Look" />
+  <動作 名前="立つ" 種類="静止"><アニメーション><ポーズ 画像="/shime1.png" 長さ="250" /></アニメーション></動作>
+  <動作 名前="歩く" 種類="移動"><アニメーション><ポーズ 画像="/shime1.png" /><ポーズ 画像="/shime2.png" /><ポーズ 画像="/shime1.png" /><ポーズ 画像="/shime3.png" /></アニメーション></動作>
+  <動作 名前="寝そべる" 種類="静止"><アニメーション><ポーズ 画像="/shime21.png" /></アニメーション></動作>
+  <動作 名前="座って見上げる" 種類="静止"><アニメーション><ポーズ 画像="/shime26.png" /></アニメーション></動作>
+  </マスコット>`
+  // Shimeji-ee 英文样例
+  const enXml = `<Action name="Walk" type="Move"><Animation><Pose Image="shime2.png" /><Pose Image="shime3.png" /></Animation></Action>
+  <Action name="Stand" type="Static"><Animation><Pose Image="shime1.png" /></Animation></Action>`
+
+  test('日文格式提取动作帧并去重保序', () => {
+    const acts = xml.extractActionFrames(jpXml)
+    const walk = acts.find(a => a.name === '歩く')
+    assert.deepEqual(walk.frames, [1, 2, 3], '歩く = [1,2,1,3] 去重后 [1,2,3]')
+  })
+
+  test('日文语义映射：立つ→idle、歩く→walk、寝そべる→sleep', () => {
+    const m = xml.parseShimejiConf(jpXml)
+    assert.deepEqual(m.walk, [1, 2, 3])
+    assert.deepEqual(m.idle, [1])
+    assert.deepEqual(m.sleep, [21])
+  })
+
+  test('英文格式识别', () => {
+    const m = xml.parseShimejiConf(enXml)
+    assert.deepEqual(m.walk, [2, 3])
+    assert.deepEqual(m.idle, [1])
+  })
+
+  test('内置动作（无帧）不产生映射', () => {
+    const m = xml.parseShimejiConf(jpXml)
+    // 振り向く 是自闭合内置动作，不应出现
+    assert.ok(!xml.extractActionFrames(jpXml).some(a => a.name === '振り向く'))
+  })
+
+  test('isActionConf 识别动作文件且排除 XSD', () => {
+    assert.equal(xml.isActionConf(jpXml), true)
+    assert.equal(xml.isActionConf('<xs:schema xmlns:xs="..."/>'), false)
+  })
+
+  test('无命中动作返回空映射', () => {
+    assert.deepEqual(xml.parseShimejiConf('<動作 名前="謎の動作"><アニメーション><ポーズ 画像="/shime1.png" /></アニメーション></動作>'), {})
   })
 }
 

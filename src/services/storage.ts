@@ -4,7 +4,7 @@
 // 注意：sync_save 导出的 ~/.promptpal/promptpal_data.json 结构不在本层管辖，
 //       其字段格式是 CLI（pal）与旧备份文件的兼容契约，不得改动。
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 const VERSION_KEY = 'promptpal_schema_version'
 
 // 校验器：把 unknown 规整为 T；不合法时返回 null（调用方得到 fallback）
@@ -12,9 +12,12 @@ export type Validator<T> = (raw: unknown) => T | null
 
 // 迁移链：migrations[v-1] 把数据从版本 v 升级到 v+1。
 // v1→v2：pet_style 新增 spritePath/frameMap/frameRate 可选字段——
-// 读取端已兜底缺省，数据本身无需改写，此处仅走链升版本。
+//   读取端已兜底缺省，数据本身无需改写，此处仅走链升版本。
+// v2→v3：frameMap 值增加可选 frames 帧列表（Shimeji 非连续引用）——
+//   同为可选字段，读取端双格式兼容，仅走链升版本。
 const migrations: Array<() => void> = [
   () => { /* v2 新字段可选，读取端兜底 */ },
+  () => { /* v3 frames 可选，读取端兜底 */ },
 ]
 
 export function ensureSchemaVersion(): void {

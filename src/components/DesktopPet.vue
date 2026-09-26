@@ -53,26 +53,36 @@ const frameW = computed(() => Math.max(1, petStore.currentStyle.spriteFrameWidth
 const frameH = computed(() => Math.max(1, petStore.currentStyle.spriteFrameHeight || 100))
 const totalFrames = computed(() => Math.max(1, petStore.currentStyle.spriteFrames || 1))
 
-// 取当前状态的帧序列：越界钳制；未配置状态回退 walk；全未配置则第 1 帧静止
-function rangeFor(s: string): { start: number; count: number } {
+// 取当前状态的播放序列：frames 列表优先，否则 start..start+count-1 区间；
+// 越界钳制；未配置状态回退 walk；全未配置则第 1 帧静止
+function rangeFor(s: string): number[] {
   const fm = petStore.frameMap
   const key = s === 'sleeping' ? 'sleep' : s === 'idle' ? 'idle' : 'walk'
-  const r = fm[key as 'walk'] || fm['walk']
+  const r = (fm[key as 'walk'] || fm['walk']) as { start?: number; count?: number; frames?: number[] } | undefined
   const total = totalFrames.value
-  if (!r || !Number.isFinite(r.start) || !Number.isFinite(r.count)) {
-    return { start: 1, count: 1 }
+  const clamp = (n: number) => Math.min(Math.max(1, Math.floor(n)), total)
+  if (r && Array.isArray(r.frames) && r.frames.length > 0) {
+    const seq = r.frames.map(n => clamp(n))
+    // 单帧重复列表视为该帧静止播放（保留时长语义）
+    return seq
   }
-  const start = Math.min(Math.max(1, Math.floor(r.start)), total)
+  if (!r || !Number.isFinite(r.start) || !Number.isFinite(r.count)) {
+    return [1]
+  }
+  const start = clamp(r.start)
   const count = Math.min(Math.max(1, Math.floor(r.count)), total - start + 1)
-  return { start, count }
+  return Array.from({ length: count }, (_, i) => start + i)
 }
 
 const currentFrame = ref(1)
 let spriteTimer: number | null = null
 
+// 按序列索引推进（支持 [1,2,1,3] 式重复引用）
+let seqIndex = 0
 const spriteTick = () => {
-  const { start, count } = rangeFor(state.value)
-  currentFrame.value = currentFrame.value >= start + count - 1 ? start : currentFrame.value + 1
+  const seq = rangeFor(state.value)
+  seqIndex = seqIndex + 1 >= seq.length ? 0 : seqIndex + 1
+  currentFrame.value = seq[seqIndex]
 }
 
 const stopSpriteTimer = () => {
@@ -81,13 +91,13 @@ const stopSpriteTimer = () => {
 const startSpriteTimer = () => {
   stopSpriteTimer()
   if (!spriteMode.value) return
-  currentFrame.value = rangeFor(state.value).start
+  currentFrame.value = rangeFor(state.value)[0]
   spriteTimer = window.setInterval(spriteTick, 1000 / petStore.frameRate)
 }
 
 watch(spriteMode, (on) => { on ? startSpriteTimer() : stopSpriteTimer() })
 watch(() => petStore.frameRate, () => { if (spriteMode.value) startSpriteTimer() })
-watch(state, () => { if (spriteMode.value) currentFrame.value = rangeFor(state.value).start })
+watch(state, () => { if (spriteMode.value) currentFrame.value = rangeFor(state.value)[0] })
 
 // 图片可加载性探测：asset 通道失败则粘住切 dataURL；dataURL 也失败回落 CSS 渲染
 watch(spriteUrl, (url) => {

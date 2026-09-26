@@ -16,8 +16,8 @@
 
 ## 3. 统计面板
 
-- [ ] 3.1 新建 `StatsPanel.vue`（概览四数字 + Top10 bar + 分类分布 bar + 空状态），PanelPage nav 加 stats 视图——验证：build 通过，手测数字与库数据一致
-- [ ] 3.2 组 3 commit（`feat(panel): usage stats view`）并推送——验证：CI 绿
+- [x] 3.1 新建 `StatsPanel.vue`（概览四数字 + Top10 bar + 分类分布 bar + 空状态），PanelPage nav 加 stats 视图——验证：build 通过，手测数字与库数据一致
+- [x] 3.2 组 3 commit（`feat(panel): usage stats view`）并推送——验证：CI 绿
 
 ## 4. 收尾
 

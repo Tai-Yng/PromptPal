@@ -2,8 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { loadJson, saveJson, ensureSchemaVersion, type Validator } from '../services/storage'
 
-// 状态帧映射：1-based 起始帧 + 帧数；未配置的状态由渲染端回退 walk 序列
-export interface SpriteFrameRange { start: number; count: number }
+// 状态帧映射：start+count 连续区间，或 frames 显式帧列表（Shimeji 非连续引用如 [1,2,1,3]）；
+// frames 存在时优先；未配置的状态由渲染端回退 walk 序列
+export interface SpriteFrameRange { start: number; count: number; frames?: number[] }
 export type SpriteFrameMap = Partial<Record<'walk' | 'idle' | 'sleep', SpriteFrameRange>>
 export type SpriteFrameRate = 4 | 8 | 12 | 16
 

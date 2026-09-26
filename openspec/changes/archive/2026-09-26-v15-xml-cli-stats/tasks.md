@@ -22,4 +22,4 @@
 ## 4. 收尾
 
 - [x] 4.1 版本 1.5.0：package.json、README 徽章、CHANGELOG——验证：三处一致
-- [ ] 4.2 全量终验：对照三份 spec 场景手测，通过后 `openspec archive`
+- [x] 4.2 全量终验：对照三份 spec 场景手测，通过后 `openspec archive`

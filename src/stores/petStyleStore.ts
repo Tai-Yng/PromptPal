@@ -2,6 +2,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { loadJson, saveJson, ensureSchemaVersion, type Validator } from '../services/storage'
 
+// 状态帧映射：1-based 起始帧 + 帧数；未配置的状态由渲染端回退 walk 序列
+export interface SpriteFrameRange { start: number; count: number }
+export type SpriteFrameMap = Partial<Record<'walk' | 'idle' | 'sleep', SpriteFrameRange>>
+export type SpriteFrameRate = 4 | 8 | 12 | 16
+
 // 桌宠样式配置
 export interface PetStyle {
   // 颜色
@@ -164,6 +169,47 @@ export const usePetStyleStore = defineStore('petStyle', () => {
   // 是否使用自定义精灵图
   const useCustomSprite = ref(false)
 
+  // ===== 精灵造型（v2 字段）=====
+  // Tauri 环境存文件路径（~/.promptpal/pet_sprite.png）；浏览器 dev 降级 data URL 存 currentStyle.spriteSheet
+  const spritePath = ref<string>('')
+  const frameMap = ref<SpriteFrameMap>({})
+  const frameRate = ref<SpriteFrameRate>(8)
+
+  // 应用精灵造型（Tauri 传文件路径，浏览器 dev 传 dataUrl）
+  const setSprite = (cfg: {
+    path?: string
+    dataUrl?: string
+    frameWidth: number
+    frameHeight: number
+    frames: number
+    frameMap: SpriteFrameMap
+    frameRate: SpriteFrameRate
+  }) => {
+    spritePath.value = cfg.path || ''
+    currentStyle.value.spriteSheet = cfg.dataUrl || ''
+    currentStyle.value.spriteFrameWidth = cfg.frameWidth
+    currentStyle.value.spriteFrameHeight = cfg.frameHeight
+    currentStyle.value.spriteFrames = cfg.frames
+    frameMap.value = cfg.frameMap
+    frameRate.value = cfg.frameRate
+    useCustomSprite.value = true
+    currentThemeId.value = 'custom'
+    saveToStorage()
+  }
+
+  // 恢复默认 CSS 机器人：清除全部精灵配置
+  const clearSprite = () => {
+    spritePath.value = ''
+    frameMap.value = {}
+    frameRate.value = 8
+    useCustomSprite.value = false
+    delete currentStyle.value.spriteSheet
+    delete currentStyle.value.spriteFrameWidth
+    delete currentStyle.value.spriteFrameHeight
+    delete currentStyle.value.spriteFrames
+    saveToStorage()
+  }
+
   // 应用预设主题
   const applyTheme = (themeId: string) => {
     const theme = presetThemes.find(t => t.id === themeId)
@@ -191,51 +237,31 @@ export const usePetStyleStore = defineStore('petStyle', () => {
     saveToStorage()
   }
 
-  // 导入精灵图（Petdex/Codex格式）
-  const importSprite = (spriteData: {
-    imageUrl: string
-    frameWidth: number
-    frameHeight: number
-    frames: number
-  }) => {
-    currentStyle.value.spriteSheet = spriteData.imageUrl
-    currentStyle.value.spriteFrameWidth = spriteData.frameWidth
-    currentStyle.value.spriteFrameHeight = spriteData.frameHeight
-    currentStyle.value.spriteFrames = spriteData.frames
-    useCustomSprite.value = true
-    currentThemeId.value = 'custom'
-    saveToStorage()
-  }
-
-  // 清除自定义精灵图
-  const clearSprite = () => {
-    useCustomSprite.value = false
-    delete currentStyle.value.spriteSheet
-    delete currentStyle.value.spriteFrameWidth
-    delete currentStyle.value.spriteFrameHeight
-    delete currentStyle.value.spriteFrames
-    saveToStorage()
-  }
-
   // 保存到本地存储（经统一存储层）
   const saveToStorage = () => {
     saveJson('promptpal_pet_style', {
       style: currentStyle.value,
       themeId: currentThemeId.value,
-      useCustomSprite: useCustomSprite.value
+      useCustomSprite: useCustomSprite.value,
+      spritePath: spritePath.value,
+      frameMap: frameMap.value,
+      frameRate: frameRate.value
     })
   }
 
   // 从本地存储加载
   const loadFromStorage = () => {
     ensureSchemaVersion()
-    const validator: Validator<{ style?: PetStyle; themeId?: string; useCustomSprite?: boolean }> = (raw) =>
+    const validator: Validator<{ style?: PetStyle; themeId?: string; useCustomSprite?: boolean; spritePath?: string; frameMap?: SpriteFrameMap; frameRate?: SpriteFrameRate }> = (raw) =>
       raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null
     const parsed = loadJson('promptpal_pet_style', null, validator)
     if (parsed) {
       if (parsed.style) currentStyle.value = parsed.style
       if (parsed.themeId) currentThemeId.value = parsed.themeId
       if (parsed.useCustomSprite !== undefined) useCustomSprite.value = parsed.useCustomSprite
+      if (typeof parsed.spritePath === 'string') spritePath.value = parsed.spritePath
+      if (parsed.frameMap && typeof parsed.frameMap === 'object') frameMap.value = parsed.frameMap
+      if (parsed.frameRate && [4, 8, 12, 16].includes(parsed.frameRate)) frameRate.value = parsed.frameRate
     }
   }
 
@@ -259,12 +285,15 @@ export const usePetStyleStore = defineStore('petStyle', () => {
     currentStyle,
     currentThemeId,
     useCustomSprite,
+    spritePath,
+    frameMap,
+    frameRate,
     presetThemes,
     cssVariables,
     applyTheme,
     updateColor,
     updateShape,
-    importSprite,
+    setSprite,
     clearSprite,
     saveToStorage
   }

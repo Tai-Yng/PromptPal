@@ -47,6 +47,43 @@ fn sync_save(data: String) -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
+/// 保存桌宠精灵图（base64 入参；PNG/WebP 魔数校验，≤5MB）
+#[tauri::command]
+fn save_pet_sprite(data: String) -> Result<String, String> {
+    use base64::Engine as _;
+    const MAX_BYTES: usize = 5 * 1024 * 1024;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.trim())
+        .map_err(|e| format!("invalid base64: {}", e))?;
+    if bytes.len() > MAX_BYTES {
+        return Err(format!("image too large: {} bytes (max 5MB)", bytes.len()));
+    }
+    let is_png = bytes.len() >= 8 && bytes.starts_with(&[0x89, b'P', b'N', b'G']);
+    let is_webp = bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP";
+    if !is_png && !is_webp {
+        return Err("unsupported format: PNG/WebP only".into());
+    }
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let dir = home.join(".promptpal");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    let path = dir.join("pet_sprite.png");
+    std::fs::write(&path, &bytes).map_err(|e| format!("Failed to write: {}", e))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// 读取桌宠精灵图（返回 base64；不存在返回空串）
+#[tauri::command]
+fn load_pet_sprite() -> Result<String, String> {
+    use base64::Engine as _;
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let path = home.join(".promptpal").join("pet_sprite.png");
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("Failed to read: {}", e))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 /// 同步数据：从本地文件加载 JSON
 #[tauri::command]
 fn sync_load() -> Result<String, String> {
@@ -323,6 +360,8 @@ pub fn run() {
         sync_save,
         sync_load,
         backup_data_file,
+        save_pet_sprite,
+        load_pet_sprite,
         gitee_verify,
         gitee_push,
         gitee_pull,

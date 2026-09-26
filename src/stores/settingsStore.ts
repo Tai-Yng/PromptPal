@@ -34,7 +34,10 @@ export const useSettingsStore = defineStore('settings', () => {
     sleepTimeout: 120,
     walkSpeed: 0.3,
     dblClickCopy: true,
-    contextAware: true
+    contextAware: true,
+    // AI 代理状态联动（v1.6）：总开关默认关，超时 30–300s 可调
+    agentLink: false,
+    agentLinkTimeoutMs: 90000
   })
 
   // 快捷方式配置

@@ -8,10 +8,10 @@
 
 ## 2. 状态文件协议 + 徽章
 
-- [ ] 2.1 Rust `read_agent_state` 命令（读 `~/.promptpal/agent_state.json` 返回字符串或空）+ `read_settings_file`/`write_settings_file` 白名单命令（严格匹配三端配置路径），注册 invoke_handler——验证：cargo check 通过
-- [ ] 2.2 新 `services/agentState.ts`：协议解析（损坏容忍）+ 90s 超时回落逻辑，纯函数断言进 test-pure.mjs——验证：`npm test` 全绿
-- [ ] 2.3 DesktopPet 1s 轮询 + agentBadge 徽章（working 蓝脉冲/done 绿）+ done 庆祝小跳与「✓ Agent done」气泡 + settingsStore `agentLinkEnabled` 总开关（默认关、关闭不轮询）——验证：手写状态文件手测徽章/庆祝/超时回落
-- [ ] 2.4 组 2 commit（`feat(pet): agent state file protocol + badge`）并推送——验证：CI 绿
+- [x] 2.1 Rust `read_agent_state` 命令（读 `~/.promptpal/agent_state.json` 返回字符串或空）+ `read_settings_file`/`write_settings_file` 白名单命令（严格匹配三端配置路径），注册 invoke_handler——验证：cargo check 通过
+- [x] 2.2 新 `services/agentState.ts`：协议解析（损坏容忍）+ 90s 超时回落逻辑，纯函数断言进 test-pure.mjs——验证：`npm test` 全绿
+- [x] 2.3 DesktopPet 1s 轮询 + agentBadge 徽章（working 蓝脉冲/done 绿）+ done 庆祝小跳与「✓ Agent done」气泡 + settingsStore `agentLinkEnabled` 总开关（默认关、关闭不轮询）——验证：手写状态文件手测徽章/庆祝/超时回落
+- [x] 2.4 组 2 commit（`feat(pet): agent state file protocol + badge`）并推送——验证：CI 绿
 
 ## 3. 三端安装器
 

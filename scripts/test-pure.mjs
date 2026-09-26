@@ -43,11 +43,13 @@ let storageUrl = null
 let variablesUrl = null
 let xmlUrl = null
 let agentUrl = null
+let installerUrl = null
 try {
   storageUrl = bundle('src/services/storage.ts', 'storage.mjs')
   variablesUrl = bundle('src/services/variables.ts', 'variables.mjs')
   xmlUrl = bundle('src/services/shimejiXml.ts', 'shimejiXml.mjs')
   agentUrl = bundle('src/services/agentState.ts', 'agentState.mjs')
+  installerUrl = bundle('src/services/agentInstaller.ts', 'agentInstaller.mjs')
 } catch (e) {
   console.error('[FAIL] esbuild bundle:', e?.message || e)
   process.exit(1)
@@ -276,6 +278,48 @@ console.log('agentState.ts:')
     assert.ok(line.includes('-Agent claude -State done'))
     assert.ok(line.includes(sp))
     assert.ok(ag.HOOK_SCRIPT.includes('agent_state.json'))
+  })
+}
+
+// ===== agentInstaller.ts =====
+console.log('agentInstaller.ts:')
+{
+  const ai = await import(installerUrl)
+  const SP = '~/.promptpal/agent-hook.ps1'
+  const base = 'model = "x"\n\n[mcp_servers]\nfoo = 1\n'
+
+  await test('JSON install: 4 events appended, idempotent, user entries untouched', async () => {
+    const cfg = { hooks: { enabled: true, events: { Stop: [{ type: 'process', command: 'mine.exe', statusMessage: 'mine' }] } } }
+    const out = ai.applyJsonInstall(JSON.parse(JSON.stringify(cfg)), 'zcode', SP)
+    assert.equal(out.hooks.enabled, true)
+    assert.equal(out.hooks.events.Stop.length, 2)
+    assert.equal(out.hooks.events.Stop[0].statusMessage, 'mine')
+    assert.equal(out.hooks.events.UserPromptSubmit.filter(e => e.statusMessage.startsWith('PromptPal:')).length, 1)
+    const again = ai.applyJsonInstall(out, 'zcode', SP)
+    assert.equal(again.hooks.events.Stop.length, 2)
+    assert.equal(again.hooks.events.PostToolUse.length, 1)
+  })
+
+  await test('JSON uninstall: only PromptPal entries removed', async () => {
+    let cfg = { hooks: { Stop: [
+      { type: 'process', command: 'mine.exe', statusMessage: 'mine' },
+      { type: 'process', command: 'powershell', statusMessage: 'PromptPal: Stop' }
+    ] } } }
+    cfg = ai.applyJsonInstall(cfg, 'claude', SP)
+    cfg = ai.applyJsonUninstall(cfg, 'claude')
+    assert.equal(cfg.hooks.Stop.filter(e => e.statusMessage === 'mine').length, 1)
+    assert.equal(cfg.hooks.Stop.filter(e => e.statusMessage.startsWith('PromptPal:')).length, 0)
+  })
+
+  await test('TOML install: append-only, dedup, uninstall restores', async () => {
+    const out = ai.applyTomlInstall(base, 'codex')
+    assert.ok(out.startsWith(base))
+    assert.equal((out.match(/# PromptPal:/g) || []).length, 4)
+    assert.ok(out.includes('[[hooks.Stop]]'))
+    assert.ok(out.includes("commandWindows = '"))
+    const again = ai.applyTomlInstall(out, 'codex')
+    assert.equal(again, out)
+    assert.equal(ai.stripTomlBlocks(again), base)
   })
 }
 

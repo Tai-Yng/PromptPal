@@ -15,8 +15,8 @@
 
 ## 3. 三端安装器
 
-- [ ] 3.1 安装器核心 `services/agentInstaller.ts`：三端格式追加/查重/按标记卸载（ZCode/Claude JSON parse-edit、Codex TOML append-only 文本层），hook 命令生成（PowerShell stdin→状态文件）——验证：纯函数断言（样例 JSON/TOML 进出）进 test-pure.mjs 全绿
-- [ ] 3.2 PetTab agents 区 UI：总开关 + 三行代理开关与安装状态显示，操作经 Rust 白名单命令读写真实配置——验证：手测三端接入（用户真实配置共存验证）、重复开启防重、卸载干净
+- [x] 3.1 安装器核心 `services/agentInstaller.ts`：三端格式追加/查重/按标记卸载（ZCode/Claude JSON parse-edit、Codex TOML append-only 文本层），hook 命令生成（PowerShell stdin→状态文件）——验证：纯函数断言（样例 JSON/TOML 进出）进 test-pure.mjs 全绿
+- [x] 3.2 PetTab agents 区 UI：总开关 + 三行代理开关与安装状态显示，操作经 Rust 白名单命令读写真实配置——验证：手测三端接入（用户真实配置共存验证）、重复开启防重、卸载干净
 - [ ] 3.3 三端实测：ZCode 下发一个任务观察 working→done 徽章与庆祝；Claude/Codex 同——验证：真实端到端通过
 - [ ] 3.4 组 3 commit（`feat(pet): agent hook installers (zcode/claude/codex)`）并推送——验证：CI 绿
 

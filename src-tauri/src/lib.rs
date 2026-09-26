@@ -111,10 +111,22 @@ fn whitelist_paths() -> Vec<std::path::PathBuf> {
 }
 
 fn check_whitelist(path: &str) -> Result<std::path::PathBuf, String> {
-    let requested = std::path::PathBuf::from(path);
-    let canonical = requested
-        .canonicalize()
-        .map_err(|_| format!("file not found: {}", path))?;
+    // 前端拿不到主目录绝对路径：支持 ~/ 前缀（仅 home 下一层语义）
+    let requested = if let Some(rest) = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
+        match dirs::home_dir() {
+            Some(h) => h.join(rest),
+            None => return Err("Cannot find home directory".into()),
+        }
+    } else {
+        std::path::PathBuf::from(path)
+    };
+    // 首次写入时目标可能不存在：退化为父目录 canonicalize + 文件名比对
+    let canonical = requested.canonicalize().ok().or_else(|| {
+        let file_name = requested.file_name()?.to_os_string();
+        let parent = requested.parent()?.canonicalize().ok()?;
+        Some(parent.join(file_name))
+    });
+    let canonical = canonical.ok_or_else(|| format!("file not found: {}", path))?;
     for allowed in whitelist_paths() {
         if let Ok(allowed_canonical) = allowed.canonicalize() {
             if allowed_canonical == canonical {

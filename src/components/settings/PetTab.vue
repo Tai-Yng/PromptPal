@@ -5,6 +5,56 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { usePetStyleStore, presetThemes, type SpriteFrameMap, type SpriteFrameRate } from '../../stores/petStyleStore'
 import { isTauri } from '../../services/platform'
 import { stitchFrames, stitchFromZip } from '../../services/spriteStitch'
+import { installAgent, uninstallAgent, agentStatus, type AgentId, type LinkStatus } from '../../services/agentInstaller'
+
+// ===== AI 代理接入（v1.6） =====
+const agentRows = ref<Array<{ id: AgentId; label: string }>>([
+  { id: 'zcode', label: 'ZCode' },
+  { id: 'claude', label: 'Claude Code' },
+  { id: 'codex', label: 'Codex' }
+])
+const agentStates = ref<Record<string, LinkStatus>>({})
+const agentBusy = ref('')
+const agentMsg = ref('')
+
+const statusLabel = (st: LinkStatus) => ({
+  linked: 'linked',
+  partial: 'partial',
+  'not-installed': 'not installed',
+  missing: 'config missing'
+}[st])
+
+const refreshAgentStatus = async () => {
+  if (!isTauri()) return
+  for (const row of agentRows.value) {
+    agentStates.value[row.id] = await agentStatus(row.id)
+  }
+}
+
+const toggleAgent = async (id: AgentId) => {
+  if (agentBusy.value) return
+  agentBusy.value = id
+  agentMsg.value = '...'
+  try {
+    const current = agentStates.value[id]
+    if (current === 'linked') {
+      await uninstallAgent(id)
+      agentMsg.value = `[OK] ${id} unlinked`
+    } else {
+      await installAgent(id)
+      agentMsg.value = `[OK] ${id} linked`
+    }
+  } catch (e: any) {
+    agentMsg.value = `[ERR] ${String(e).slice(0, 80)}`
+  } finally {
+    agentBusy.value = ''
+    await refreshAgentStatus()
+  }
+}
+
+watch(() => store.petConfig.agentLink, (on) => {
+  if (on) void refreshAgentStatus()
+}, { immediate: true })
 
 const store = useSettingsStore()
 const petStore = usePetStyleStore()
@@ -247,6 +297,36 @@ const previewStyle = computed(() => pending.value ? ({
           <span class="theme-dot" :style="{ background: t.style.primaryColor, boxShadow: `0 0 6px ${t.style.primaryColor}` }"></span>
           {{ t.name }}
         </button>
+      </div>
+    </div>
+
+    <!-- Agent Link -->
+    <div class="cfg-row">
+      <span class="cfg-key">agents</span>
+      <span class="cfg-op">=</span>
+      <div class="cfg-value agent-block">
+        <button
+          class="toggle-char"
+          :class="{ active: store.petConfig.agentLink }"
+          @click="store.updatePetConfig({ agentLink: !store.petConfig.agentLink })"
+        >
+          {{ store.petConfig.agentLink ? '[x]' : '[ ]' }}
+        </button>
+        <span class="cfg-hint">pet reflects AI agent state (zcode / claude / codex)</span>
+        <div v-if="store.petConfig.agentLink" class="agent-rows">
+          <div v-for="row in agentRows" :key="row.id" class="agent-row">
+            <span class="agent-name">{{ row.label }}</span>
+            <span class="agent-status" :class="agentStates[row.id]">{{ statusLabel(agentStates[row.id] || 'not-installed') }}</span>
+            <button
+              class="sprite-btn sm"
+              :disabled="agentBusy === row.id || agentStates[row.id] === 'missing'"
+              @click="toggleAgent(row.id)"
+            >
+              {{ agentStates[row.id] === 'linked' ? 'unlink' : 'link' }}
+            </button>
+          </div>
+          <div v-if="agentMsg" class="sprite-err ok">{{ agentMsg }}</div>
+        </div>
       </div>
     </div>
 

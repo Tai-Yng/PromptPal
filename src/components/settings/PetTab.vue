@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { usePetStyleStore, presetThemes, type SpriteFrameMap, type SpriteFrameRate } from '../../stores/petStyleStore'
 import { isTauri } from '../../services/platform'
+import { stitchFrames } from '../../services/spriteStitch'
 
 const store = useSettingsStore()
 const petStore = usePetStyleStore()
@@ -31,34 +32,66 @@ const rate = ref<SpriteFrameRate>(8)
 
 const pickFile = () => fileInputRef.value?.click()
 
+// 多选导入：散帧 PNG（Shimeji img/ 目录全选）→ 自动横向拼条 + 预填参数
 const handleFile = async (e: Event) => {
   const input = e.target as HTMLInputElement
-  const file = input.files?.[0]
+  const files = Array.from(input.files || [])
   input.value = ''
-  if (!file) return
+  if (files.length === 0) return
   importError.value = ''
-  if (!['image/png', 'image/webp'].includes(file.type)) {
-    importError.value = '[ERR] only PNG / WebP'
-    return
-  }
-  if (file.size > MAX_SPRITE_BYTES) {
-    importError.value = `[ERR] ${(file.size / 1024 / 1024).toFixed(1)}MB > 5MB`
-    return
+  for (const f of files) {
+    if (!['image/png', 'image/webp'].includes(f.type)) {
+      importError.value = `[ERR] ${f.name}: only PNG / WebP`
+      return
+    }
+    if (f.size > MAX_SPRITE_BYTES) {
+      importError.value = `[ERR] ${f.name}: ${(f.size / 1024 / 1024).toFixed(1)}MB > 5MB`
+      return
+    }
   }
   importing.value = true
   try {
-    const dataUrl = await new Promise<string>((res, rej) => {
+    const dataUrls = await Promise.all(files.map(f => new Promise<string>((res, rej) => {
       const r = new FileReader()
       r.onload = () => res(r.result as string)
       r.onerror = () => rej(new Error('read failed'))
-      r.readAsDataURL(file)
-    })
-    const base64 = dataUrl.split(',')[1] || ''
+      r.readAsDataURL(f)
+    })))
+    const inputs = files.map((f, i) => ({ name: f.name, dataUrl: dataUrls[i] }))
+    const stitched = files.length === 1
+      ? await (async () => {
+          // 单图：视作已是 sprite sheet，直接用
+          const img = await new Promise<HTMLImageElement>((res, rej) => {
+            const im = new Image()
+            im.onload = () => res(im)
+            im.onerror = () => rej(new Error('decode failed'))
+            im.src = dataUrls[0]
+          })
+          return { dataUrl: dataUrls[0], frameWidth: img.width, frameHeight: img.height, frames: 1 }
+        })()
+      : await stitchFrames(inputs)
+
+    // 拼条结果过 5MB 关（save_pet_sprite 的上限）
+    const outBytes = Math.ceil(stitched.dataUrl.length * 0.75)
+    if (outBytes > MAX_SPRITE_BYTES) {
+      importError.value = `[ERR] stitched sheet ${(outBytes / 1024 / 1024).toFixed(1)}MB > 5MB — import fewer frames`
+      return
+    }
+
+    const base64 = stitched.dataUrl.split(',')[1] || ''
     let path = ''
     if (isTauri()) {
       path = await invoke<string>('save_pet_sprite', { data: base64 })
     }
-    pending.value = { dataUrl, base64, path }
+    pending.value = { dataUrl: stitched.dataUrl, base64, path }
+    // 预填：帧尺寸/总帧数来自拼条，walk 预填全帧，用户可调
+    fw.value = stitched.frameWidth
+    fh.value = stitched.frameHeight
+    frames.value = stitched.frames
+    walkStart.value = 1
+    walkCount.value = stitched.frames
+    idleEnabled.value = false
+    sleepEnabled.value = false
   } catch (err: any) {
     importError.value = `[ERR] ${String(err).slice(0, 80)}`
   } finally {
@@ -156,6 +189,7 @@ const previewStyle = computed(() => pending.value ? ({
           ref="fileInputRef"
           type="file"
           accept="image/png,image/webp"
+          multiple
           style="display: none"
           @change="handleFile"
         />
@@ -173,7 +207,7 @@ const previewStyle = computed(() => pending.value ? ({
         <!-- 未启用：导入 + 配置表单 -->
         <template v-else>
           <button class="sprite-btn" :disabled="importing" @click="pickFile">
-            <span class="btn-sym">$</span> {{ importing ? 'importing...' : 'import sprite sheet (PNG/WebP ≤ 5MB)' }}
+            <span class="btn-sym">$</span> {{ importing ? 'stitching...' : 'import frames — multi-select PNGs (Shimeji img/ all-select, sheet ≤ 5MB)' }}
           </button>
           <div v-if="importError" class="sprite-err">{{ importError }}</div>
 

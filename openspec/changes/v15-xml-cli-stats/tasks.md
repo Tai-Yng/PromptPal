@@ -10,9 +10,9 @@
 
 ## 2. CLI 变量填空（Rust + Node）
 
-- [ ] 2.1 Rust `cli-rs/src/main.rs`：手写变量扫描器（双语法/`--` 排除/去重）+ dialoguer Input 循环填空 + 替换复制，`cargo build --release` 通过——验证：手测样例（含 `--ar 16:9 [风格]`）输出与 UI 一致
-- [ ] 2.2 Node `cli/bin/pal.js`：同步变量填空（inquirer input 循环），规则与 Rust 端一致——验证：`node cli/bin/pal.js` 手测同一样例
-- [ ] 2.3 组 2 commit（`feat(cli): variable fill-in on both runtimes`）并推送——验证：CI 绿
+- [x] 2.1 Rust `cli-rs/src/main.rs`：手写变量扫描器（双语法/`--` 排除/去重）+ dialoguer Input 循环填空 + 替换复制，`cargo build --release` 通过——验证：手测样例（含 `--ar 16:9 [风格]`）输出与 UI 一致
+- [x] 2.2 Node `cli/bin/pal.js`：同步变量填空（inquirer input 循环），规则与 Rust 端一致——验证：`node cli/bin/pal.js` 手测同一样例
+- [x] 2.3 组 2 commit（`feat(cli): variable fill-in on both runtimes`）并推送——验证：CI 绿
 
 ## 3. 统计面板
 

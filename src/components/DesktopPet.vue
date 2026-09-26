@@ -9,6 +9,7 @@ import { usePetMovement } from '../composables/usePetMovement'
 import { useContextSuggest } from '../composables/useContextSuggest'
 import { useFocusSync } from '../composables/useFocusSync'
 import { exitApp } from '../services/autoSync'
+import { isTauri } from '../services/platform'
 import { loadJson, loadString } from '../services/storage'
 
 const petStore = usePetStyleStore()
@@ -27,14 +28,27 @@ const { state, direction, isDragging, showSleepZzz, wakeUp, handleMouseDown } = 
 
 // ============ 精灵渲染（v1.4 自定义造型） ============
 // 精灵模式与 CSS 机器人互斥；图片缺失/加载失败自动回落 CSS 渲染
+// 双通道：Tauri 优先 asset 协议（convertFileSrc），失败粘住回落 dataURL（load_pet_sprite 兜底）
 const spriteFailed = ref(false)
+const assetFailed = ref(false)
+const memoryDataUrl = ref('')
 const spriteUrl = computed(() => {
-  if (petStore.spritePath) return convertFileSrc(petStore.spritePath)
-  return petStore.currentStyle.spriteSheet || ''
+  if (petStore.spritePath && !assetFailed.value) return convertFileSrc(petStore.spritePath)
+  return petStore.currentStyle.spriteSheet || memoryDataUrl.value || ''
 })
 const spriteMode = computed(() =>
   petStore.useCustomSprite && !!spriteUrl.value && !spriteFailed.value
 )
+
+// 加载文件版精灵为 dataURL（asset 协议不可用时的渲染兜底）
+const loadMemorySprite = async () => {
+  if (!isTauri() || !petStore.spritePath) return
+  try {
+    const b64 = await invoke<string>('load_pet_sprite')
+    if (b64) memoryDataUrl.value = `data:image/png;base64,${b64}`
+  } catch {/* ignore */}
+}
+watch(() => petStore.spritePath, () => { void loadMemorySprite() }, { immediate: true })
 const frameW = computed(() => Math.max(1, petStore.currentStyle.spriteFrameWidth || 80))
 const frameH = computed(() => Math.max(1, petStore.currentStyle.spriteFrameHeight || 100))
 const totalFrames = computed(() => Math.max(1, petStore.currentStyle.spriteFrames || 1))
@@ -75,12 +89,15 @@ watch(spriteMode, (on) => { on ? startSpriteTimer() : stopSpriteTimer() })
 watch(() => petStore.frameRate, () => { if (spriteMode.value) startSpriteTimer() })
 watch(state, () => { if (spriteMode.value) currentFrame.value = rangeFor(state.value).start })
 
-// 图片可加载性探测：加载失败回落 CSS 渲染（保留配置，修复后自动恢复）
+// 图片可加载性探测：asset 通道失败则粘住切 dataURL；dataURL 也失败回落 CSS 渲染
 watch(spriteUrl, (url) => {
   if (!spriteMode.value) return
   spriteFailed.value = false
   const img = new Image()
-  img.onerror = () => { spriteFailed.value = true }
+  img.onerror = () => {
+    if (petStore.spritePath && !assetFailed.value) assetFailed.value = true
+    else spriteFailed.value = true
+  }
   img.src = url
 }, { immediate: true })
 

@@ -57,8 +57,121 @@ fn main() {
         return;
     }
     let prompt = &prompts[pi];
-    copy_to_clipboard(&prompt.content);
+
+    // 带变量的提示词：逐项填空（留空保留占位符），无变量直通
+    let content = fill_variables_interactive(&prompt.content);
+    copy_to_clipboard(&content);
     println!("\n  [OK] \"{}\" copied to clipboard\n", prompt.title);
+}
+
+// ===== 模板变量（与主面板 UI 同规则：双语法、-- 排除、1-40 字、去重保序） =====
+
+/// 占位符扫描结果：(起始字节, 结束字节[不含], 变量名)
+struct VarToken {
+    start: usize,
+    end: usize,
+    name: String,
+}
+
+fn scan_variables(content: &str) -> Vec<VarToken> {
+    let chars: Vec<(usize, char)> = content.char_indices().collect();
+    let n = chars.len();
+    let mut tokens = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut i = 0;
+    while i < n {
+        let (byte_pos, c) = chars[i];
+        // 识别开括号：[ 或 {{（{ 后须再跟一个 {）；前邻同类括号视为嵌套，跳过
+        let prev_is_bracket = i > 0 && (chars[i - 1].1 == '[' || chars[i - 1].1 == '{');
+        let (open_chars, close_ch) = if c == '[' && !prev_is_bracket {
+            (1usize, ']')
+        } else if c == '{' && !prev_is_bracket && i + 1 < n && chars[i + 1].1 == '{' {
+            (2usize, '}')
+        } else {
+            i += 1;
+            continue;
+        };
+        // 从 open 之后收集名字到 close；遇换行或同类开括号视为非法
+        let mut j = i + open_chars;
+        let mut name = String::new();
+        let mut end: Option<usize> = None;
+        let mut invalid = false;
+        while j < n {
+            let (b, cj) = chars[j];
+            if cj == close_ch {
+                if open_chars == 2 {
+                    if j + 1 < n && chars[j + 1].1 == '}' {
+                        end = Some(chars[j + 1].0 + 1);
+                        break;
+                    }
+                } else {
+                    end = Some(b + cj.len_utf8());
+                    break;
+                }
+            }
+            if cj == '\n' || cj == '[' || cj == '{' {
+                invalid = true;
+                break;
+            }
+            name.push(cj);
+            j += 1;
+        }
+        if !invalid {
+            if let Some(end_byte) = end {
+                let trimmed = name.trim();
+                let valid = !trimmed.is_empty()
+                    && trimmed.chars().count() <= 40
+                    && !trimmed.starts_with("--");
+                if valid && seen.insert(trimmed.to_string()) {
+                    tokens.push(VarToken { start: byte_pos, end: end_byte, name: trimmed.to_string() });
+                }
+                i = j + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    tokens
+}
+
+/// 替换：values 有非空值则替换，否则保留占位符原文
+fn substitute(content: &str, tokens: &[VarToken], values: &std::collections::HashMap<String, String>) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut last = 0usize;
+    for t in tokens {
+        out.push_str(&content[last..t.start]);
+        match values.get(&t.name).map(|v| v.trim()).filter(|v| !v.is_empty()) {
+            Some(v) => out.push_str(v),
+            None => out.push_str(&content[t.start..t.end]),
+        }
+        last = t.end;
+    }
+    out.push_str(&content[last..]);
+    out
+}
+
+/// 交互填空：每个变量一项 Input，直接回车 = 留空保留占位符；取消则复制原文
+fn fill_variables_interactive(content: &str) -> String {
+    let tokens = scan_variables(content);
+    if tokens.is_empty() {
+        return content.to_string();
+    }
+    println!("\n  [var] {} variable(s) — Enter keeps placeholder\n", tokens.len());
+    let mut values = std::collections::HashMap::new();
+    for t in &tokens {
+        let input = dialoguer::Input::<String>::new()
+            .with_prompt(format!("  {}", t.name))
+            .allow_empty(true)
+            .interact_text();
+        match input {
+            Ok(v) if !v.trim().is_empty() => {
+                values.insert(t.name.clone(), v);
+            }
+            Ok(_) => {}
+            Err(_) => return content.to_string(),
+        }
+    }
+    substitute(content, &tokens, &values)
 }
 
 fn cat_label(cat: &str) -> &str {
@@ -96,4 +209,31 @@ fn load_prompts() -> Result<Vec<Prompt>, String> {
         _ => return Err("Invalid data format".into()),
     };
     Ok(prompts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan_dual_syntax_dedup_and_dash_exclusion() {
+        let toks = scan_variables("画一张 [风格] 的 {{主体}}，--ar 16:9 [风格]");
+        let names: Vec<&String> = toks.iter().map(|t| &t.name).collect();
+        assert_eq!(names, vec!["风格", "主体"]);
+    }
+
+    #[test]
+    fn substitute_keeps_empty_placeholder() {
+        let tokens = scan_variables("[a] 和 {{b}}");
+        let mut vals = std::collections::HashMap::new();
+        vals.insert("b".to_string(), "一只猫".to_string());
+        assert_eq!(substitute("[a] 和 {{b}}", &tokens, &vals), "[a] 和 一只猫");
+    }
+
+    #[test]
+    fn nested_and_long_names_rejected() {
+        assert!(scan_variables("[[嵌套]]").is_empty());
+        let long = "x".repeat(41);
+        assert!(scan_variables(&format!("[{}]", long)).is_empty());
+    }
 }

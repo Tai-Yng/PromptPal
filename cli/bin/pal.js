@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { select, Separator } = require('@inquirer/prompts')
+const { select, Separator, input } = require('@inquirer/prompts')
 const { execSync } = require('child_process')
 const { existsSync, readFileSync } = require('fs')
 const { join, dirname } = require('path')
@@ -89,16 +89,60 @@ async function main() {
       pageSize: 15,
     })
 
-    const ok = clipboardWrite(selected.content)
+    // 带变量的提示词：逐项填空（留空保留占位符），无变量直通
+    const content = await fillVariablesInteractive(selected.content)
+    const ok = clipboardWrite(content)
     if (ok) {
       console.log(`\n  [OK] "${selected.title}" copied to clipboard\n`)
     } else {
-      console.log('\n' + selected.content + '\n')
+      console.log('\n' + content + '\n')
     }
   } catch {
     // user cancelled (Ctrl+C)
     process.exit(0)
   }
+}
+
+// ===== 模板变量（与主面板/Rust CLI 同规则：双语法、-- 排除、1-40 字、去重保序） =====
+function scanVariables(content) {
+  const tokens = []
+  const seen = new Set()
+  const re = /(?<!\[)\[([^\[\]\n]{1,40})\](?!\])|(?<!\{)\{\{([^{}\n]{1,40})\}\}(?!\})/g
+  for (const m of content.matchAll(re)) {
+    const name = (m[1] ?? m[2] ?? '').trim()
+    if (!name || name.startsWith('--') || seen.has(name)) continue
+    seen.add(name)
+    tokens.push({ text: m[0], name })
+  }
+  return tokens
+}
+
+function substitute(content, tokens, values) {
+  let out = content
+  for (const t of tokens) {
+    const v = values[t.name]
+    out = v && v.trim()
+      ? out.split(t.text).join(v)
+      : out
+  }
+  return out
+}
+
+async function fillVariablesInteractive(content) {
+  const tokens = scanVariables(content)
+  if (tokens.length === 0) return content
+  console.log(`\n  [var] ${tokens.length} variable(s) — Enter keeps placeholder\n`)
+  const values = {}
+  for (const t of tokens) {
+    let v = ''
+    try {
+      v = await input({ message: `  ${t.name}`, default: '' })
+    } catch {
+      return content // 取消：复制原文
+    }
+    if (v && v.trim()) values[t.name] = v
+  }
+  return substitute(content, tokens, values)
 }
 
 main()

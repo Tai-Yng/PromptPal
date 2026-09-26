@@ -439,3 +439,27 @@
   image-rendering: pixelated;
   pointer-events: none;
 }
+
+/* ── 庆祝星星粒子（v1.6）── */
+.star-burst {
+  position: absolute;
+  left: 50%;
+  bottom: 105px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.star {
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  font-size: 12px;
+  color: var(--warning);
+  text-shadow: 0 0 6px var(--warning);
+  animation: star-fly 0.6s ease-out forwards;
+}
+@keyframes star-fly {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+  20% { opacity: 1; transform: translate(calc(var(--tx) * 0.3), calc(var(--ty) * 0.3)) scale(1.1); }
+  100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0.6); }
+}

@@ -195,8 +195,23 @@ const handleClick = async () => {
     store.incrementUseCount(prompt.id)
     showCopySuccess.value = true
     setTimeout(() => { showCopySuccess.value = false }, 1500)
+    triggerCelebration()
   }
   isCopying.value = false
+}
+
+// ============ 庆祝小跳 + 星星粒子（复制成功 / agent 完成共用） ============
+const stars = ref<Array<{ id: number; tx: number; ty: number }>>([])
+let starSeq = 0
+const triggerCelebration = () => {
+  movement.celebrate()
+  const burst = Array.from({ length: 6 }, () => {
+    const angle = Math.random() * Math.PI * 2
+    const dist = 26 + Math.random() * 22
+    return { id: ++starSeq, tx: Math.cos(angle) * dist, ty: Math.sin(angle) * dist - 18 }
+  })
+  stars.value = burst
+  setTimeout(() => { stars.value = [] }, 600)
 }
 
 // ============ 双击打开面板 ============
@@ -236,6 +251,10 @@ const quitApp = () => {
 // 其余时间整窗穿透（气泡/菜单/拖拽期间强制交互）
 let cursorTimer: number | null = null
 let ignoreState: boolean | null = null
+const eyeOffset = ref({ x: 0, y: 0 })
+const eyeStyle = computed(() => ({
+  transform: `translate(${eyeOffset.value.x}px, ${eyeOffset.value.y}px)`
+}))
 const applyIgnore = async (v: boolean) => {
   if (ignoreState === v) return
   ignoreState = v
@@ -251,8 +270,13 @@ const updateCursorPass = async () => {
     if (interactive) { await applyIgnore(false); return }
     const pos = await cursorPosition()  // 物理像素（全局）
     const sf = movement.scaleFactor.value || 1
-    const over = movement.cursorOverRobot(pos.x / sf, pos.y / sf)
+    const lx = pos.x / sf, ly = pos.y / sf
+    const over = movement.cursorOverRobot(lx, ly)
     await applyIgnore(!over)
+    // 眼睛跟随：睡眠时不看
+    eyeOffset.value = state.value === 'sleeping'
+      ? { x: 0, y: 0 }
+      : movement.cursorEyeOffset(lx, ly)
   } catch {/* ignore */}
 }
 
@@ -297,8 +321,8 @@ onUnmounted(() => {
         </div>
         <div class="head">
           <div class="visor">
-            <div class="eye" :class="state"></div>
-            <div class="eye" :class="state"></div>
+            <div class="eye" :class="state" :style="eyeStyle"></div>
+            <div class="eye" :class="state" :style="eyeStyle"></div>
           </div>
         </div>
         <div class="torso">
@@ -312,6 +336,9 @@ onUnmounted(() => {
       <div v-else class="pet-sprite" :style="spriteStyle"></div>
 
       <div v-if="showCopySuccess" class="copy-tip">已复制!</div>
+      <div v-if="stars.length" class="star-burst">
+        <span v-for="st in stars" :key="st.id" class="star" :style="{ '--tx': st.tx + 'px', '--ty': st.ty + 'px' }">✦</span>
+      </div>
       <div v-if="showSleepZzz" class="zzz"><span>Z</span><span>z</span><span>z</span></div>
       <div v-if="todoStore.focusMode && todoStore.planActive.length > 0" class="focus-indicator" title="focus mode active">
         <span class="focus-dot">●</span>

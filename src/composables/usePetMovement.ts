@@ -272,9 +272,29 @@ export function usePetMovement(options: { isCopying: Ref<boolean>; robotVisual: 
     return wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h
   }
 
+  // 光标相对机器人眼睛中心的窗口内偏移（供眼睛跟随；离得越远偏移越接近限幅）
+  const cursorEyeOffset = (logicalGlobalX: number, logicalGlobalY: number) => {
+    const r = robotRectInWindow()
+    const ex = windowX + r.x + r.w / 2
+    const ey = windowY + r.y + r.h * 0.25
+    const clamp = (v: number) => Math.max(-3, Math.min(3, v))
+    return {
+      x: clamp((logicalGlobalX - ex) / 40),
+      y: clamp((logicalGlobalY - ey) / 40)
+    }
+  }
+
+  // 庆祝小跳：上移 15–40px 后落回（复制成功 / agent 完成共用）
+  const celebrate = () => {
+    if (state.value === 'sleeping' || isDragging.value) return
+    const hopY = groundY() - getRandomInt(15, 40)
+    try { getCurrentWindow().setPosition(new LogicalPosition(Math.round(windowX), Math.round(hopY))) } catch {/* ignore */}
+    setTimeout(landAfterHop, 180)
+  }
+
   return {
     state, direction, isDragging, showSleepZzz,
     init, cleanup, wakeUp, handleMouseDown,
-    scaleFactor, cursorOverRobot
+    scaleFactor, cursorOverRobot, cursorEyeOffset, celebrate
   }
 }

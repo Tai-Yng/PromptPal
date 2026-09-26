@@ -4,6 +4,19 @@ All notable changes to PromptPal will be documented in this file.
 
 ---
 
+## v1.5.0 (2026-09-26)
+
+### Added
+- **Shimeji ZIP import with XML auto-mapping**: import a whole mascot pack ZIP — frames stitched from img/, conf action XML parsed (Shimeji-ee English + Group-Finity Japanese formats) to auto-fill walk/idle/sleep frame sequences; verified with a real 46-frame pack
+- **Frame-list model**: frameMap values accept explicit frame sequences ([1,2,1,3]-style non-continuous loops, frames take precedence over start+count); schema v3, lossless
+- **CLI variable fill-in**: Rust pal.exe (primary) and Node pal.js both prompt per-variable input on prompts with placeholders — empty input keeps the placeholder, cancel copies verbatim; rules identical to the UI (dual syntax, -- exclusion, dedup)
+- **Usage stats view**: overview cards (prompts / total uses / used>0 / favorites), top-10 usage ranking and category distribution with proportional bars — computed live, no chart dependency
+
+### Fixed
+- Shimeji parser: self-closing action blocks no longer swallow the next action's frames
+
+---
+
 ## v1.4.0 (2026-09-26)
 
 ### Added

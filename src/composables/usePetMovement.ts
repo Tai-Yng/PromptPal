@@ -41,11 +41,14 @@ export function usePetMovement(options: { isCopying: Ref<boolean> }) {
   let windowStartY = 0
 
   // ============ 屏幕工作区 ============
+  // Monitor.size() 是物理像素，setPosition 用逻辑坐标——必须按缩放系数转换，
+  // 否则在 125%/150% 缩放的屏幕上会把桌宠算到屏幕外
   const updateWorkArea = async () => {
     try {
       const monitor = await currentMonitor()
       if (monitor) {
-        workArea = { width: monitor.size.width, height: monitor.size.height }
+        const logical = monitor.size.toLogical(monitor.scaleFactor)
+        workArea = { width: logical.width, height: logical.height }
       }
     } catch {/* ignore */}
   }

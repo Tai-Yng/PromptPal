@@ -90,7 +90,11 @@ const containerStyle = computed(() =>
 // ============ 运动状态机（行走/拖拽/睡眠） ============
 const isCopying = ref(false)
 const showCopySuccess = ref(false)
-const movement = usePetMovement({ isCopying })
+// 可见机器人尺寸：精灵模式跟随帧尺寸，CSS 机器人 80×100
+const robotVisual = computed(() =>
+  spriteMode.value ? { w: frameW.value, h: frameH.value } : { w: 80, h: 100 }
+)
+const movement = usePetMovement({ isCopying, robotVisual })
 const { state, direction, isDragging, showSleepZzz, wakeUp, handleMouseDown } = movement
 
 // ============ 专注模式 ============

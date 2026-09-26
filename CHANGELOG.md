@@ -4,7 +4,7 @@ All notable changes to PromptPal will be documented in this file.
 
 ---
 
-## v1.4.0 (2026-09-25)
+## v1.4.0 (2026-09-26)
 
 ### Added
 - **Custom pet skin**: import a single-row sprite sheet (PNG/WebP ≤ 5MB, Shimeji community packs work) to replace the CSS robot; per-state frame mapping (walk/idle/sleep start+count) with live checkerboard preview, fps selectable 4/8/12/16; sheet persisted to `~/.promptpal/pet_sprite.png` via new Rust commands; colors/shapes settings hide while a skin is active with one-click restore; missing/broken sheet auto-falls back to the CSS robot

@@ -42,10 +42,12 @@ const bundle = (entry, out) => {
 let storageUrl = null
 let variablesUrl = null
 let xmlUrl = null
+let agentUrl = null
 try {
   storageUrl = bundle('src/services/storage.ts', 'storage.mjs')
   variablesUrl = bundle('src/services/variables.ts', 'variables.mjs')
   xmlUrl = bundle('src/services/shimejiXml.ts', 'shimejiXml.mjs')
+  agentUrl = bundle('src/services/agentState.ts', 'agentState.mjs')
 } catch (e) {
   console.error('[FAIL] esbuild bundle:', e?.message || e)
   process.exit(1)
@@ -236,6 +238,44 @@ console.log('shimejiXml.ts:')
 
   test('无命中动作返回空映射', () => {
     assert.deepEqual(xml.parseShimejiConf('<動作 名前="謎の動作"><アニメーション><ポーズ 画像="/shime1.png" /></アニメーション></動作>'), {})
+  })
+}
+
+// ===== agentState.ts（协议解析纯函数） =====
+console.log('agentState.ts:')
+{
+  const ag = await import(agentUrl)
+  const NOW = 1_000_000_000
+
+  test('working/done 正常解析', () => {
+    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'zcode', state: 'working', ts: NOW - 500 }), NOW, 90_000), 'working')
+    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'claude', state: 'done', ts: NOW - 1000 }), NOW, 90_000), 'done')
+  })
+
+  test('超时回落 null', () => {
+    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'zcode', state: 'working', ts: NOW - 90_001 }), NOW, 90_000), null)
+  })
+
+  test('idle 视为无状态', () => {
+    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'zcode', state: 'idle', ts: NOW }), NOW, 90_000), null)
+  })
+
+  test('损坏文本/缺字段容忍', () => {
+    assert.equal(ag.parseAgentBadge('{broken', NOW, 90_000), null)
+    assert.equal(ag.parseAgentBadge('{"state":"working"}', NOW, 90_000), null)
+    assert.equal(ag.parseAgentBadge('{"agent":"x","state":"hacked","ts":1}', NOW, 90_000), null)
+  })
+
+  test('hookArgs/hookCommandLine 含 agent/state 且指向脚本', () => {
+    const sp = 'C:/Users/x/.promptpal/agent-hook.ps1'
+    const { command, args } = ag.hookArgs('zcode', 'working', sp)
+    assert.equal(command, 'powershell')
+    assert.deepEqual(args.slice(-4), ['-Agent', 'zcode', '-State', 'working'])
+    assert.ok(args.includes(sp))
+    const line = ag.hookCommandLine('claude', 'done', sp)
+    assert.ok(line.includes('-Agent claude -State done'))
+    assert.ok(line.includes(sp))
+    assert.ok(ag.HOOK_SCRIPT.includes('agent_state.json'))
   })
 }
 

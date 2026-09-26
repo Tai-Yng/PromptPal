@@ -84,6 +84,61 @@ fn load_pet_sprite() -> Result<String, String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
+/// 读取代理状态文件（~/.promptpal/agent_state.json；不存在返回空串）
+#[tauri::command]
+fn read_agent_state() -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("Cannot find home directory")?;
+    let path = home.join(".promptpal").join("agent_state.json");
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read: {}", e))
+}
+
+/// 白名单路径（canonicalize 后严格匹配才允许读写）
+fn whitelist_paths() -> Vec<std::path::PathBuf> {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return Vec::new(),
+    };
+    vec![
+        home.join(".zcode").join("cli").join("config.json"),
+        home.join(".claude").join("settings.json"),
+        home.join(".codex").join("config.toml"),
+        // agent hook 脚本（PromptPal 自己的数据目录）
+        home.join(".promptpal").join("agent-hook.ps1"),
+    ]
+}
+
+fn check_whitelist(path: &str) -> Result<std::path::PathBuf, String> {
+    let requested = std::path::PathBuf::from(path);
+    let canonical = requested
+        .canonicalize()
+        .map_err(|_| format!("file not found: {}", path))?;
+    for allowed in whitelist_paths() {
+        if let Ok(allowed_canonical) = allowed.canonicalize() {
+            if allowed_canonical == canonical {
+                return Ok(allowed_canonical);
+            }
+        }
+    }
+    Err("path not in whitelist".into())
+}
+
+/// 读取白名单内的代理配置文件（仅限三端 hook 配置路径）
+#[tauri::command]
+fn read_settings_file(path: String) -> Result<String, String> {
+    let allowed = check_whitelist(&path)?;
+    std::fs::read_to_string(&allowed).map_err(|e| format!("Failed to read: {}", e))
+}
+
+/// 写入白名单内的代理配置文件（仅限三端 hook 配置路径）
+#[tauri::command]
+fn write_settings_file(path: String, content: String) -> Result<(), String> {
+    let allowed = check_whitelist(&path)?;
+    std::fs::write(&allowed, content).map_err(|e| format!("Failed to write: {}", e))
+}
+
 /// 同步数据：从本地文件加载 JSON
 #[tauri::command]
 fn sync_load() -> Result<String, String> {
@@ -362,6 +417,9 @@ pub fn run() {
         backup_data_file,
         save_pet_sprite,
         load_pet_sprite,
+        read_agent_state,
+        read_settings_file,
+        write_settings_file,
         gitee_verify,
         gitee_push,
         gitee_pull,

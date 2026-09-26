@@ -10,6 +10,7 @@ import { usePetMovement } from '../composables/usePetMovement'
 import { useContextSuggest } from '../composables/useContextSuggest'
 import { useFocusSync } from '../composables/useFocusSync'
 import { exitApp } from '../services/autoSync'
+import { fetchAgentBadge } from '../services/agentState'
 import { isTauri } from '../services/platform'
 import { loadJson, loadString } from '../services/storage'
 
@@ -200,6 +201,24 @@ const handleClick = async () => {
   isCopying.value = false
 }
 
+// ============ AI 代理状态联动（v1.6） ============
+// 1s 轮询状态文件；总开关关闭不轮询。done 触发庆祝后徽章转绿停留 10s。
+const agentBadge = ref<'working' | 'done' | null>(null)
+let agentTimer: number | null = null
+let doneUntil = 0
+const agentPoll = async () => {
+  if (!settingsStore.petConfig.agentLink) {
+    agentBadge.value = null
+    return
+  }
+  const badge = await fetchAgentBadge(settingsStore.petConfig.agentLinkTimeoutMs)
+  if (badge === 'done' && agentBadge.value !== 'done') {
+    triggerCelebration()
+    doneUntil = Date.now() + 10_000
+  }
+  agentBadge.value = Date.now() < doneUntil && badge !== 'working' ? 'done' : badge
+}
+
 // ============ 庆祝小跳 + 星星粒子（复制成功 / agent 完成共用） ============
 const stars = ref<Array<{ id: number; tx: number; ty: number }>>([])
 let starSeq = 0
@@ -285,6 +304,7 @@ onMounted(async () => {
   if (isTauri()) {
     await applyIgnore(true)  // 启动默认穿透，由轮询接管
     cursorTimer = window.setInterval(updateCursorPass, 120)
+    agentTimer = window.setInterval(agentPoll, 1000)
   }
   suggest.init()
   focusSync.syncTodoStore()  // 初始化同步，focusMode=on 时自动启动 polling
@@ -292,6 +312,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  if (agentTimer) clearInterval(agentTimer)
   if (cursorTimer) clearInterval(cursorTimer)
   movement.cleanup()
   suggest.cleanup()
@@ -342,6 +363,9 @@ onUnmounted(() => {
       <div v-if="showSleepZzz" class="zzz"><span>Z</span><span>z</span><span>z</span></div>
       <div v-if="todoStore.focusMode && todoStore.planActive.length > 0" class="focus-indicator" title="focus mode active">
         <span class="focus-dot">●</span>
+      </div>
+      <div v-else-if="agentBadge" class="agent-badge" :class="agentBadge" :title="`agent ${agentBadge}`">
+        <span class="badge-dot"></span>
       </div>
     </div>
 

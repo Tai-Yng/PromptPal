@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { invoke, convertFileSrc } from '@tauri-apps/api/core'
+import { getCurrentWindow, cursorPosition } from '@tauri-apps/api/window'
 import { usePromptStore } from '../stores/promptStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { usePetStyleStore } from '../stores/petStyleStore'
@@ -230,14 +231,44 @@ const quitApp = () => {
 }
 
 // ============ 生命周期 ============
+// ============ 动态鼠标穿透 ============
+// 透明窗口会拦截 340x380 全矩形的点击；仅鼠标悬停机器人本体时接收事件，
+// 其余时间整窗穿透（气泡/菜单/拖拽期间强制交互）
+let cursorTimer: number | null = null
+let ignoreState: boolean | null = null
+const applyIgnore = async (v: boolean) => {
+  if (ignoreState === v) return
+  ignoreState = v
+  try { await getCurrentWindow().setIgnoreCursorEvents(v) } catch {/* ignore */}
+}
+const updateCursorPass = async () => {
+  try {
+    const win = getCurrentWindow()
+    // 气泡/右键菜单/拖拽/复制提示可见 → 必须可交互
+    const interactive = isDragging.value || showSuggestBubble.value
+      || showFocusBubble.value || showContextMenu.value || showCopySuccess.value
+      || todoStore.focusAnim !== null
+    if (interactive) { await applyIgnore(false); return }
+    const pos = await cursorPosition()  // 物理像素（全局）
+    const sf = movement.scaleFactor.value || 1
+    const over = movement.cursorOverRobot(pos.x / sf, pos.y / sf)
+    await applyIgnore(!over)
+  } catch {/* ignore */}
+}
+
 onMounted(async () => {
   await movement.init()
+  if (isTauri()) {
+    await applyIgnore(true)  // 启动默认穿透，由轮询接管
+    cursorTimer = window.setInterval(updateCursorPass, 120)
+  }
   suggest.init()
   focusSync.syncTodoStore()  // 初始化同步，focusMode=on 时自动启动 polling
   if (spriteMode.value) startSpriteTimer()
 })
 
 onUnmounted(() => {
+  if (cursorTimer) clearInterval(cursorTimer)
   movement.cleanup()
   suggest.cleanup()
   focusSync.cleanup()

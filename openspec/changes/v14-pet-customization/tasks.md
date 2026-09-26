@@ -8,9 +8,9 @@
 
 ## 2. 精灵渲染与导入 UI
 
-- [ ] 2.1 DesktopPet 精灵渲染分支：精灵图层 div（background-image + background-position 切帧）+ 帧定时器（frameRate 可调）+ 按 state 取 frameMap 序列 + 未配置回退 walk + 图片缺失/渲染异常回落 CSS 机器人——验证：`tauri:dev` 手测状态切换播放、删图回落
-- [ ] 2.2 PetTab 导入 UI：文件选择（Tauri dialog）→ 格式/大小校验（≤5MB，超限拒绝提示）→ 帧宽/帧高/总帧数/三状态帧映射表单 + 实时预览 + 帧率四档 + 精灵模式下隐藏颜色/形状区并显示「恢复默认机器人」——验证：手测合规导入、超限拒绝、越界钳制、互斥显示、一键恢复
-- [ ] 2.3 组 2 独立 commit（`feat(pet): sprite skin import & render`）并推送——验证：tsc + build + 测试脚本全绿，CI 绿
+- [x] 2.1 DesktopPet 精灵渲染分支：精灵图层 div（background-image + background-position 切帧）+ 帧定时器（frameRate 可调）+ 按 state 取 frameMap 序列 + 未配置回退 walk + 图片缺失/渲染异常回落 CSS 机器人——验证：`tauri:dev` 手测状态切换播放、删图回落
+- [x] 2.2 PetTab 导入 UI：文件选择（Tauri dialog）→ 格式/大小校验（≤5MB，超限拒绝提示）→ 帧宽/帧高/总帧数/三状态帧映射表单 + 实时预览 + 帧率四档 + 精灵模式下隐藏颜色/形状区并显示「恢复默认机器人」——验证：手测合规导入、超限拒绝、越界钳制、互斥显示、一键恢复
+- [x] 2.3 组 2 独立 commit（`feat(pet): sprite skin import & render`）并推送——验证：tsc + build + 测试脚本全绿，CI 绿
 
 ## 3. 全屏漫游修复
 

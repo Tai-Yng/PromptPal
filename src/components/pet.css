@@ -432,3 +432,10 @@
 @keyframes leg-move { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 @keyframes zzz-float { 0% { opacity: 0; transform: translateY(0); } 50% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-10px); } }
 @keyframes pop { 0% { opacity: 0; transform: translateX(-50%) scale(0.8); } 100% { opacity: 1; transform: translateX(-50%) scale(1); } }
+
+/* ── 精灵图造型（v1.4）── */
+.pet-sprite {
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+}

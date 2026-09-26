@@ -53,6 +53,7 @@ export function usePetMovement(options: { isCopying: Ref<boolean>; robotVisual: 
       if (monitor) {
         const logical = monitor.size.toLogical(monitor.scaleFactor)
         workArea = { width: logical.width, height: logical.height }
+        scaleFactor.value = monitor.scaleFactor
       }
     } catch {/* ignore */}
   }
@@ -253,8 +254,27 @@ export function usePetMovement(options: { isCopying: Ref<boolean>; robotVisual: 
     document.removeEventListener('mouseup', handleMouseUp)
   }
 
+  // ============ 鼠标穿透判定 ============
+  // 透明窗口会拦截整个 340x380 矩形的点击——须动态穿透：
+  // 仅当全局鼠标悬停在机器人可见矩形内时才接收事件。
+  const scaleFactor = ref(1)
+  const robotRectInWindow = () => ({
+    x: robotOffX(),
+    y: PET_H - robotVisual.value.h,
+    w: robotVisual.value.w,
+    h: robotVisual.value.h
+  })
+  // 全局鼠标逻辑坐标是否落在机器人矩形（窗口内坐标）
+  const cursorOverRobot = (logicalGlobalX: number, logicalGlobalY: number) => {
+    const r = robotRectInWindow()
+    const wx = logicalGlobalX - windowX
+    const wy = logicalGlobalY - windowY
+    return wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h
+  }
+
   return {
     state, direction, isDragging, showSleepZzz,
-    init, cleanup, wakeUp, handleMouseDown
+    init, cleanup, wakeUp, handleMouseDown,
+    scaleFactor, cursorOverRobot
   }
 }

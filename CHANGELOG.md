@@ -4,6 +4,18 @@ All notable changes to PromptPal will be documented in this file.
 
 ---
 
+## v1.4.0 (2026-09-25)
+
+### Added
+- **Custom pet skin**: import a single-row sprite sheet (PNG/WebP ≤ 5MB, Shimeji community packs work) to replace the CSS robot; per-state frame mapping (walk/idle/sleep start+count) with live checkerboard preview, fps selectable 4/8/12/16; sheet persisted to `~/.promptpal/pet_sprite.png` via new Rust commands; colors/shapes settings hide while a skin is active with one-click restore; missing/broken sheet auto-falls back to the CSS robot
+- **Schema v2**: first exercise of the storage migration chain (optional pet_style fields, lossless upgrade)
+
+### Fixed
+- **Pet roaming**: movement now anchors on the visible robot instead of its 340×380 window — the 138px dead zones on both screen sides and the unreachable top 280px are gone (window may partially leave the screen)
+- **Patrol walk**: replaced the drunk-walk random turning (2%/tick) with target-edge patrol that reliably crosses the full screen; at the edge 40% long idle (5–10s) else a short pause then turn; hop behavior kept; work area refreshes every 10s to follow resolution/scale changes
+
+---
+
 ## v1.3.0 (2026-09-25)
 
 ### Added

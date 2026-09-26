@@ -5,12 +5,13 @@ import PromptPanel from './PromptPanel.vue'
 import AIGeneratePanel from './AIGeneratePanel.vue'
 import SettingsPanel from './SettingsPanel.vue'
 import TodoPanel from './TodoPanel.vue'
+import StatsPanel from './StatsPanel.vue'
 import { useSettingsStore } from '../stores/settingsStore'
 import { usePetStyleStore } from '../stores/petStyleStore'
 import { usePromptStore } from '../stores/promptStore'
 import { checkStartupSync, takeStartupCandidate, applyPulledData } from '../services/autoSync'
 
-const activeView = ref<'prompt' | 'ai' | 'todo' | 'settings'>('prompt')
+const activeView = ref<'prompt' | 'ai' | 'todo' | 'stats' | 'settings'>('prompt')
 
 const closePanelWindow = async () => {
   try {
@@ -94,6 +95,14 @@ const handleIgnorePull = () => {
         </button>
         <button
           class="nav-btn"
+          :class="{ active: activeView === 'stats' }"
+          @click="activeView = 'stats'"
+        >
+          <span class="nav-prompt">%</span>
+          <span>stats</span>
+        </button>
+        <button
+          class="nav-btn"
           :class="{ active: activeView === 'settings' }"
           @click="activeView = 'settings'"
         >
@@ -113,6 +122,7 @@ const handleIgnorePull = () => {
       <PromptPanel v-if="activeView === 'prompt'" />
       <AIGeneratePanel v-if="activeView === 'ai'" @close="activeView = 'prompt'" @settings="activeView = 'settings'" />
       <TodoPanel v-if="activeView === 'todo'" />
+      <StatsPanel v-if="activeView === 'stats'" />
       <SettingsPanel v-if="activeView === 'settings'" @close="closePanelWindow" />
     </main>
   </div>

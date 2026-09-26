@@ -21,4 +21,4 @@
 ## 4. 收尾
 
 - [x] 4.1 版本 1.4.0：package.json、README 徽章、CHANGELOG v1.4.0 条目——验证：三处一致
-- [ ] 4.2 全量终验：对照两份 spec 逐条 scenario 过手测清单，全部通过后 `openspec archive`（v13 与 v14 一并归档）
+- [x] 4.2 全量终验：对照两份 spec 逐条 scenario 过手测清单，全部通过后 `openspec archive`（v13 与 v14 一并归档）

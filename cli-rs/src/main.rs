@@ -5,7 +5,9 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct Prompt {
+    #[serde(default)]
     title: String,
+    #[serde(default)]
     content: String,
     #[serde(default)]
     category: String,
@@ -208,7 +210,8 @@ fn load_prompts() -> Result<Vec<Prompt>, String> {
         serde_json::Value::Array(_) => serde_json::from_value(root["prompts"].clone()).map_err(|e| format!("Parse: {}", e))?,
         _ => return Err("Invalid data format".into()),
     };
-    Ok(prompts)
+    // 防御：跳过缺 title/content 的脏条目
+    Ok(prompts.into_iter().filter(|p| !p.title.is_empty() && !p.content.is_empty()).collect())
 }
 
 #[cfg(test)]

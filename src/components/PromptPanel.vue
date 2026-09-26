@@ -195,7 +195,7 @@ const addToTodo = (p: any) => {
     <!-- 网络搜索 -->
     <Transition name="fade-list">
       <div v-if="showSearch" class="search-section">
-        <NetworkSearch @select="(p: any) => { store.addPrompt(p); showSearch = false }" />
+        <NetworkSearch />
       </div>
     </Transition>
 

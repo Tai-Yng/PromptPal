@@ -4,6 +4,15 @@ All notable changes to PromptPal will be documented in this file.
 
 ---
 
+## v1.6.0 (2026-09-26)
+
+### Added
+- **AI agent state link**: the pet mirrors your coding agents' live state — hook installers for ZCode / Claude Code / Codex (one-click in Settings -> pet -> agents, coexists with your own hooks, marker-based clean uninstall), a state-file protocol with 90s timeout fallback, a pulsing badge (blue working / green done) over the robot or sprite, and a celebration burst on agent completion
+- **Eye tracking**: the robot's eyes follow your cursor across the screen (driven by the existing cursor poll, works while cursor-transparent)
+- **Celebration burst**: copy success and agent completion now trigger a hop with a star particle burst
+
+---
+
 ## v1.5.0 (2026-09-26)
 
 ### Added

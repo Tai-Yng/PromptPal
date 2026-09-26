@@ -1,11 +1,127 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { usePetStyleStore, presetThemes } from '../../stores/petStyleStore'
+import { usePetStyleStore, presetThemes, type SpriteFrameMap, type SpriteFrameRate } from '../../stores/petStyleStore'
+import { isTauri } from '../../services/platform'
 
 const store = useSettingsStore()
 const petStore = usePetStyleStore()
 const showSaved = ref(false)
+
+// ===== 精灵造型导入（v1.4） =====
+const MAX_SPRITE_BYTES = 5 * 1024 * 1024
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const importing = ref(false)
+const importError = ref('')
+const pending = ref<{ dataUrl: string; base64: string; path: string } | null>(null)
+
+const fw = ref(32)
+const fh = ref(32)
+const frames = ref(4)
+const walkStart = ref(1)
+const walkCount = ref(4)
+const idleEnabled = ref(false)
+const idleStart = ref(1)
+const idleCount = ref(1)
+const sleepEnabled = ref(false)
+const sleepStart = ref(1)
+const sleepCount = ref(1)
+const rate = ref<SpriteFrameRate>(8)
+
+const pickFile = () => fileInputRef.value?.click()
+
+const handleFile = async (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  importError.value = ''
+  if (!['image/png', 'image/webp'].includes(file.type)) {
+    importError.value = '[ERR] only PNG / WebP'
+    return
+  }
+  if (file.size > MAX_SPRITE_BYTES) {
+    importError.value = `[ERR] ${(file.size / 1024 / 1024).toFixed(1)}MB > 5MB`
+    return
+  }
+  importing.value = true
+  try {
+    const dataUrl = await new Promise<string>((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(r.result as string)
+      r.onerror = () => rej(new Error('read failed'))
+      r.readAsDataURL(file)
+    })
+    const base64 = dataUrl.split(',')[1] || ''
+    let path = ''
+    if (isTauri()) {
+      path = await invoke<string>('save_pet_sprite', { data: base64 })
+    }
+    pending.value = { dataUrl, base64, path }
+  } catch (err: any) {
+    importError.value = `[ERR] ${String(err).slice(0, 80)}`
+  } finally {
+    importing.value = false
+  }
+}
+
+const cancelPending = () => { pending.value = null; importError.value = '' }
+
+// 1-based 帧号钳制：保起始帧、缩帧数
+const clampRange = (start: number, count: number) => {
+  const total = Math.max(1, Math.floor(frames.value) || 1)
+  const s = Math.min(Math.max(1, Math.floor(start) || 1), total)
+  const c = Math.min(Math.max(1, Math.floor(count) || 1), total - s + 1)
+  return { start: s, count: c }
+}
+
+const buildFrameMap = (): SpriteFrameMap => {
+  const map: SpriteFrameMap = { walk: clampRange(walkStart.value, walkCount.value) }
+  if (idleEnabled.value) map.idle = clampRange(idleStart.value, idleCount.value)
+  if (sleepEnabled.value) map.sleep = clampRange(sleepStart.value, sleepCount.value)
+  return map
+}
+
+const applySprite = () => {
+  if (!pending.value) return
+  petStore.setSprite({
+    path: pending.value.path || undefined,
+    dataUrl: pending.value.path ? undefined : pending.value.dataUrl,
+    frameWidth: Math.max(1, Math.floor(fw.value) || 1),
+    frameHeight: Math.max(1, Math.floor(fh.value) || 1),
+    frames: Math.max(1, Math.floor(frames.value) || 1),
+    frameMap: buildFrameMap(),
+    frameRate: rate.value
+  })
+  pending.value = null
+}
+
+const restoreRobot = () => petStore.clearSprite()
+
+// 实时预览：按 walk 序列 + 当前帧率切帧
+const previewFrame = ref(1)
+let previewTimer: number | null = null
+const startPreview = () => {
+  if (previewTimer) { clearInterval(previewTimer); previewTimer = null }
+  if (!pending.value) return
+  const { start, count } = clampRange(walkStart.value, walkCount.value)
+  previewFrame.value = start
+  previewTimer = window.setInterval(() => {
+    const r = clampRange(walkStart.value, walkCount.value)
+    previewFrame.value = previewFrame.value >= r.start + r.count - 1 ? r.start : previewFrame.value + 1
+  }, 1000 / rate.value)
+}
+watch([pending, fw, walkStart, walkCount, rate], startPreview)
+onUnmounted(() => { if (previewTimer) clearInterval(previewTimer) })
+
+const previewStyle = computed(() => pending.value ? ({
+  width: `${Math.max(1, Math.floor(fw.value) || 1)}px`,
+  height: `${Math.max(1, Math.floor(fh.value) || 1)}px`,
+  backgroundImage: `url("${pending.value.dataUrl}")`,
+  backgroundRepeat: 'no-repeat' as const,
+  backgroundPosition: `-${(previewFrame.value - 1) * Math.max(1, Math.floor(fw.value) || 1)}px 0`
+}) : {})
 </script>
 
 <template>
@@ -31,8 +147,73 @@ const showSaved = ref(false)
       </div>
     </div>
 
+    <!-- Sprite Skin -->
+    <div class="cfg-row sprite-row">
+      <span class="cfg-key">skin</span>
+      <span class="cfg-op">=</span>
+      <div class="cfg-value sprite-block">
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="image/png,image/webp"
+          style="display: none"
+          @change="handleFile"
+        />
+
+        <!-- 已启用精灵 -->
+        <template v-if="petStore.useCustomSprite">
+          <div class="sprite-active">
+            <span class="sprite-ok">[SPRITE]</span> custom skin active
+          </div>
+          <button class="sprite-btn" @click="restoreRobot">
+            <span class="btn-sym">$</span> restore default robot
+          </button>
+        </template>
+
+        <!-- 未启用：导入 + 配置表单 -->
+        <template v-else>
+          <button class="sprite-btn" :disabled="importing" @click="pickFile">
+            <span class="btn-sym">$</span> {{ importing ? 'importing...' : 'import sprite sheet (PNG/WebP ≤ 5MB)' }}
+          </button>
+          <div v-if="importError" class="sprite-err">{{ importError }}</div>
+
+          <div v-if="pending" class="sprite-form">
+            <div class="sprite-preview-row">
+              <div class="sprite-preview" :style="previewStyle"></div>
+              <span class="preview-hint">walk preview · single-row sheet<br/>frames from Shimeji packs work (check license)</span>
+            </div>
+
+            <div class="sprite-grid">
+              <label class="sg-item">frame_w <input v-model.number="fw" type="number" min="1" class="sprite-input" /></label>
+              <label class="sg-item">frame_h <input v-model.number="fh" type="number" min="1" class="sprite-input" /></label>
+              <label class="sg-item">frames <input v-model.number="frames" type="number" min="1" class="sprite-input" /></label>
+              <label class="sg-item">fps
+                <select v-model.number="rate" class="sprite-select">
+                  <option :value="4">4</option>
+                  <option :value="8">8</option>
+                  <option :value="12">12</option>
+                  <option :value="16">16</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="sprite-grid">
+              <label class="sg-item">walk <input v-model.number="walkStart" type="number" min="1" class="sprite-input sm" /> → <input v-model.number="walkCount" type="number" min="1" class="sprite-input sm" /></label>
+              <label class="sg-item"><input v-model="idleEnabled" type="checkbox" class="sprite-check" /> idle <input v-model.number="idleStart" type="number" min="1" :disabled="!idleEnabled" class="sprite-input sm" /> → <input v-model.number="idleCount" type="number" min="1" :disabled="!idleEnabled" class="sprite-input sm" /></label>
+              <label class="sg-item"><input v-model="sleepEnabled" type="checkbox" class="sprite-check" /> sleep <input v-model.number="sleepStart" type="number" min="1" :disabled="!sleepEnabled" class="sprite-input sm" /> → <input v-model.number="sleepCount" type="number" min="1" :disabled="!sleepEnabled" class="sprite-input sm" /></label>
+            </div>
+
+            <div class="sprite-actions">
+              <button class="sprite-btn primary" @click="applySprite"><span class="btn-sym">$</span> enable skin</button>
+              <button class="sprite-btn" @click="cancelPending">cancel</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- Colors -->
-    <div class="cfg-row">
+    <div v-if="!petStore.useCustomSprite" class="cfg-row">
       <span class="cfg-key">colors</span>
       <span class="cfg-op">=</span>
       <div class="cfg-value color-grid">
@@ -56,7 +237,7 @@ const showSaved = ref(false)
     </div>
 
     <!-- Shapes -->
-    <div class="cfg-row">
+    <div v-if="!petStore.useCustomSprite" class="cfg-row">
       <span class="cfg-key">shape</span>
       <span class="cfg-op">=</span>
       <div class="cfg-value shape-group">

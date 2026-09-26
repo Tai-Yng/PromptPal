@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import { usePromptStore } from '../stores/promptStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { usePetStyleStore } from '../stores/petStyleStore'
@@ -14,6 +14,78 @@ import { loadJson, loadString } from '../services/storage'
 const petStore = usePetStyleStore()
 const settingsStore = useSettingsStore()
 const todoStore = useTodoStore()
+
+// ============ 精灵渲染（v1.4 自定义造型） ============
+// 精灵模式与 CSS 机器人互斥；图片缺失/加载失败自动回落 CSS 渲染
+const spriteFailed = ref(false)
+const spriteUrl = computed(() => {
+  if (petStore.spritePath) return convertFileSrc(petStore.spritePath)
+  return petStore.currentStyle.spriteSheet || ''
+})
+const spriteMode = computed(() =>
+  petStore.useCustomSprite && !!spriteUrl.value && !spriteFailed.value
+)
+const frameW = computed(() => Math.max(1, petStore.currentStyle.spriteFrameWidth || 80))
+const frameH = computed(() => Math.max(1, petStore.currentStyle.spriteFrameHeight || 100))
+const totalFrames = computed(() => Math.max(1, petStore.currentStyle.spriteFrames || 1))
+
+// 取当前状态的帧序列：越界钳制；未配置状态回退 walk；全未配置则第 1 帧静止
+function rangeFor(s: string): { start: number; count: number } {
+  const fm = petStore.frameMap
+  const key = s === 'sleeping' ? 'sleep' : s === 'idle' ? 'idle' : 'walk'
+  const r = fm[key as 'walk'] || fm['walk']
+  const total = totalFrames.value
+  if (!r || !Number.isFinite(r.start) || !Number.isFinite(r.count)) {
+    return { start: 1, count: 1 }
+  }
+  const start = Math.min(Math.max(1, Math.floor(r.start)), total)
+  const count = Math.min(Math.max(1, Math.floor(r.count)), total - start + 1)
+  return { start, count }
+}
+
+const currentFrame = ref(1)
+let spriteTimer: number | null = null
+
+const spriteTick = () => {
+  const { start, count } = rangeFor(state.value)
+  currentFrame.value = currentFrame.value >= start + count - 1 ? start : currentFrame.value + 1
+}
+
+const stopSpriteTimer = () => {
+  if (spriteTimer) { clearInterval(spriteTimer); spriteTimer = null }
+}
+const startSpriteTimer = () => {
+  stopSpriteTimer()
+  if (!spriteMode.value) return
+  currentFrame.value = rangeFor(state.value).start
+  spriteTimer = window.setInterval(spriteTick, 1000 / petStore.frameRate)
+}
+
+watch(spriteMode, (on) => { on ? startSpriteTimer() : stopSpriteTimer() })
+watch(() => petStore.frameRate, () => { if (spriteMode.value) startSpriteTimer() })
+watch(state, () => { if (spriteMode.value) currentFrame.value = rangeFor(state.value).start })
+
+// 图片可加载性探测：加载失败回落 CSS 渲染（保留配置，修复后自动恢复）
+watch(spriteUrl, (url) => {
+  if (!spriteMode.value) return
+  spriteFailed.value = false
+  const img = new Image()
+  img.onerror = () => { spriteFailed.value = true }
+  img.src = url
+}, { immediate: true })
+
+const spriteStyle = computed(() => ({
+  width: `${frameW.value}px`,
+  height: `${frameH.value}px`,
+  backgroundImage: `url("${spriteUrl.value}")`,
+  backgroundRepeat: 'no-repeat' as const,
+  backgroundPosition: `-${(currentFrame.value - 1) * frameW.value}px 0`
+}))
+
+// 精灵模式下容器尺寸跟随帧尺寸（保持底部贴地）
+const containerStyle = computed(() =>
+  spriteMode.value ? { width: `${frameW.value}px`, height: `${frameH.value}px` } : {}
+)
 
 // ============ 运动状态机（行走/拖拽/睡眠） ============
 const isCopying = ref(false)
@@ -131,12 +203,14 @@ onMounted(async () => {
   await movement.init()
   suggest.init()
   focusSync.syncTodoStore()  // 初始化同步，focusMode=on 时自动启动 polling
+  if (spriteMode.value) startSpriteTimer()
 })
 
 onUnmounted(() => {
   movement.cleanup()
   suggest.cleanup()
   focusSync.cleanup()
+  stopSpriteTimer()
   if (hoverLeaveTimer) clearTimeout(hoverLeaveTimer)
 })
 </script>
@@ -146,6 +220,7 @@ onUnmounted(() => {
     <div
       class="pet-container"
       :class="[direction, state, { copying: isCopying, dragging: isDragging }, focusClass]"
+      :style="containerStyle"
       @mousedown="handleMouseDown"
       @click="handleClick"
       @dblclick="handleDblClick"
@@ -153,8 +228,8 @@ onUnmounted(() => {
       @mouseenter="handleMouseEnter"
       @mouseleave="handleMouseLeave"
     >
-      <!-- 桌宠形象 -->
-      <div class="pet-body">
+      <!-- 桌宠形象：精灵图模式 / CSS 机器人 -->
+      <div v-if="!spriteMode" class="pet-body">
         <div class="antenna">
           <div class="antenna-ball" :class="{ active: state === 'active' || showCopySuccess }"></div>
         </div>
@@ -172,6 +247,7 @@ onUnmounted(() => {
           <div class="leg"></div>
         </div>
       </div>
+      <div v-else class="pet-sprite" :style="spriteStyle"></div>
 
       <div v-if="showCopySuccess" class="copy-tip">已复制!</div>
       <div v-if="showSleepZzz" class="zzz"><span>Z</span><span>z</span><span>z</span></div>

@@ -304,7 +304,7 @@ console.log('agentInstaller.ts:')
     let cfg = { hooks: { Stop: [
       { type: 'process', command: 'mine.exe', statusMessage: 'mine' },
       { type: 'process', command: 'powershell', statusMessage: 'PromptPal: Stop' }
-    ] } } }
+    ] } }
     cfg = ai.applyJsonInstall(cfg, 'claude', SP)
     cfg = ai.applyJsonUninstall(cfg, 'claude')
     assert.equal(cfg.hooks.Stop.filter(e => e.statusMessage === 'mine').length, 1)

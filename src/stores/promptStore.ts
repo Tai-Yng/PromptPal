@@ -82,6 +82,13 @@ export const usePromptStore = defineStore('prompt', () => {
 
   // 方法
   const addPrompt = (prompt: Omit<Prompt, 'id' | 'useCount' | 'createdAt' | 'updatedAt'>) => {
+    // 入口守卫：拒绝事件对象等非法输入（曾有 MouseEvent 被误传入库，污染数据文件）
+    if (!prompt || typeof prompt !== 'object'
+      || typeof (prompt as any).title !== 'string'
+      || typeof (prompt as any).content !== 'string') {
+      console.error('addPrompt rejected invalid input:', prompt)
+      return null
+    }
     const newPrompt: Prompt = {
       ...prompt,
       id: crypto.randomUUID(),
@@ -247,8 +254,8 @@ export const usePromptStore = defineStore('prompt', () => {
       source: 'local',
       favorite: true
     })
-    // 将第一个设为默认
-    defaultPromptId.value = p1.id
+    // 将第一个设为默认（内置样例必然通过守卫）
+    if (p1) defaultPromptId.value = p1.id
     
     addPrompt({
       title: 'Midjourney 风景画',

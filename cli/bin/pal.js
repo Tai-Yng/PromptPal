@@ -20,7 +20,10 @@ function loadPrompts() {
       if (typeof prompts === 'string') {
         try { prompts = JSON.parse(prompts) } catch { return [] }
       }
-      if (Array.isArray(prompts)) return prompts
+      if (Array.isArray(prompts)) {
+        // 防御：跳过缺 title/content 的脏条目
+        return prompts.filter(x => x && typeof x.title === 'string' && typeof x.content === 'string')
+      }
     }
   }
   return []

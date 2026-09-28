@@ -47,6 +47,15 @@ function writeCfg(path: string, content: string): Promise<void> {
 }
 
 const psScriptPathTilde = '~/.promptpal/agent-hook.ps1'
+// hook 脚本路径：配置条目里必须是绝对路径（PowerShell -File 不展开 ~）
+let homeAbs = ''
+async function scriptAbsPath(): Promise<string> {
+  if (!homeAbs) {
+    const { invoke } = await import('@tauri-apps/api/core')
+    homeAbs = await invoke<string>('get_home_dir')
+  }
+  return homeAbs.replace(/\\/g, '/') + '/.promptpal/agent-hook.ps1'
+}
 
 // hook 脚本写入（幂等）
 export async function ensureHookScript(): Promise<void> {
@@ -163,7 +172,7 @@ async function installJson(agent: AgentId): Promise<void> {
   await ensureHookScript()
   const raw = await readCfg(CONFIG_PATHS[agent]).catch(() => '')
   const cfg = raw.trim() ? JSON.parse(raw) : {}
-  const updated = applyJsonInstall(cfg, agent, psScriptPathTilde)
+  const updated = applyJsonInstall(cfg, agent, await scriptAbsPath())
   await writeCfg(CONFIG_PATHS[agent], JSON.stringify(updated, null, 2))
 }
 

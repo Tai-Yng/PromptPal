@@ -84,6 +84,14 @@ fn load_pet_sprite() -> Result<String, String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
+/// 返回用户主目录绝对路径（前端安装器用它拼 hook 脚本绝对路径——PS 的 -File 不展开 ~）
+#[tauri::command]
+fn get_home_dir() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "Cannot find home directory".into())
+}
+
 /// 读取代理状态文件（~/.promptpal/agent_state.json；不存在返回空串）
 #[tauri::command]
 fn read_agent_state() -> Result<String, String> {
@@ -437,6 +445,7 @@ pub fn run() {
         save_pet_sprite,
         load_pet_sprite,
         read_agent_state,
+        get_home_dir,
         read_settings_file,
         write_settings_file,
         gitee_verify,

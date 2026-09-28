@@ -1,0 +1,40 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Frontend checks
+        run: |
+          npm ci
+          npx tsc --noEmit
+          node scripts/test-pure.mjs
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'PromptPal v__VERSION__'
+          releaseBody: 'Windows 安装包（NSIS，支持中文安装界面）。下载 *_x64-setup.exe 直接运行即可；首次启动会自动把 pal 命令加入用户 PATH。'
+          releaseDraft: false
+          prerelease: false

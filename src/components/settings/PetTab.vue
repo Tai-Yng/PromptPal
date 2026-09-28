@@ -7,6 +7,10 @@ import { isTauri } from '../../services/platform'
 import { stitchFrames, stitchFromZip } from '../../services/spriteStitch'
 import { installAgent, uninstallAgent, agentStatus, type AgentId, type LinkStatus } from '../../services/agentInstaller'
 
+
+const store = useSettingsStore()
+const petStore = usePetStyleStore()
+
 // ===== AI 代理接入（v1.6） =====
 const agentRows = ref<Array<{ id: AgentId; label: string }>>([
   { id: 'zcode', label: 'ZCode' },
@@ -55,9 +59,6 @@ const toggleAgent = async (id: AgentId) => {
 watch(() => store.petConfig.agentLink, (on) => {
   if (on) void refreshAgentStatus()
 }, { immediate: true })
-
-const store = useSettingsStore()
-const petStore = usePetStyleStore()
 const showSaved = ref(false)
 
 // ===== 精灵造型导入（v1.4） =====

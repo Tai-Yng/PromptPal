@@ -205,7 +205,6 @@ const handleClick = async () => {
 // 1s 轮询状态文件；总开关关闭不轮询。done 触发庆祝后徽章转绿停留 10s。
 const agentState = ref<{ state: 'working' | 'done' | 'error'; detail: string } | null>(null)
 let agentTimer: number | null = null
-let doneUntil = 0
 const agentPoll = async () => {
   if (!settingsStore.petConfig.agentLink) {
     agentState.value = null
@@ -213,17 +212,14 @@ const agentPoll = async () => {
   }
   const info = await fetchAgentState(settingsStore.petConfig.agentLinkTimeoutMs)
   if (!info) {
-    agentState.value = Date.now() < doneUntil ? { state: 'done', detail: agentState.value?.detail || '' } : null
+    agentState.value = null
     return
   }
+  // 新事件立即覆盖（颜色灵敏）；done 首次出现时庆祝，持续显示到下个事件或 90s 超时
   if (info.state === 'done' && agentState.value?.state !== 'done') {
     triggerCelebration()
-    doneUntil = Date.now() + 10_000
   }
-  // done 展示期（10s）内若新事件是 working，仍优先展示 done 完成态
-  agentState.value = Date.now() < doneUntil && info.state === 'working'
-    ? { state: 'done', detail: agentState.value?.detail || info.detail }
-    : info
+  agentState.value = info
 }
 
 // ============ 庆祝小跳 + 星星粒子（复制成功 / agent 完成共用） ============
@@ -311,7 +307,8 @@ onMounted(async () => {
   if (isTauri()) {
     await applyIgnore(true)  // 启动默认穿透，由轮询接管
     cursorTimer = window.setInterval(updateCursorPass, 120)
-    agentTimer = window.setInterval(agentPoll, 1000)
+    agentTimer = window.setInterval(agentPoll, 500)
+    void agentPoll()  // 立即首拍，不等 500ms
   }
   suggest.init()
   focusSync.syncTodoStore()  // 初始化同步，focusMode=on 时自动启动 polling

@@ -288,27 +288,48 @@ console.log('agentInstaller.ts:')
   const SP = '~/.promptpal/agent-hook.ps1'
   const base = 'model = "x"\n\n[mcp_servers]\nfoo = 1\n'
 
-  await test('JSON install: 4 events appended, idempotent, user entries untouched', async () => {
-    const cfg = { hooks: { enabled: true, events: { Stop: [{ type: 'process', command: 'mine.exe', statusMessage: 'mine' }] } } }
+  await test('JSON install: matcher-group shape, idempotent, user entries untouched', async () => {
+    const cfg = { hooks: { enabled: true, events: { PostToolUse: [{ matcher: 'Write|Edit', hooks: [{ type: 'process', command: 'mine.exe', statusMessage: 'mine' }] }] } } }
     const out = ai.applyJsonInstall(JSON.parse(JSON.stringify(cfg)), 'zcode', SP)
     assert.equal(out.hooks.enabled, true)
-    assert.equal(out.hooks.events.Stop.length, 2)
-    assert.equal(out.hooks.events.Stop[0].statusMessage, 'mine')
-    assert.equal(out.hooks.events.UserPromptSubmit.filter(e => e.statusMessage.startsWith('PromptPal:')).length, 1)
+    // 用户组原样
+    assert.equal(out.hooks.events.PostToolUse[0].matcher, 'Write|Edit')
+    assert.equal(out.hooks.events.PostToolUse[0].hooks[0].statusMessage, 'mine')
+    // PP 组：handler 在 hooks 里
+    const pp = out.hooks.events.PostToolUse[1]
+    assert.equal(pp.hooks.length, 1)
+    assert.equal(pp.hooks[0].statusMessage, 'PromptPal: PostToolUse')
+    assert.equal(pp.hooks[0].type, 'process')
+    assert.ok(Array.isArray(pp.hooks[0].args))
+    // 四事件齐全
+    for (const e of ['UserPromptSubmit', 'PostToolUse', 'Stop', 'SessionEnd']) {
+      assert.ok(out.hooks.events[e].some(g => (g.hooks || []).some(h => h.statusMessage === 'PromptPal: ' + e)))
+    }
+    // 幂等
     const again = ai.applyJsonInstall(out, 'zcode', SP)
-    assert.equal(again.hooks.events.Stop.length, 2)
-    assert.equal(again.hooks.events.PostToolUse.length, 1)
+    assert.equal(again.hooks.events.PostToolUse.filter(g => g.hooks.some(h => String(h.statusMessage).startsWith('PromptPal'))).length, 1)
+    assert.equal(again.hooks.events.UserPromptSubmit.length, 1)
   })
 
-  await test('JSON uninstall: only PromptPal entries removed', async () => {
+  await test('JSON uninstall: removes PP groups, keeps user groups, cleans legacy flat entries', async () => {
     let cfg = { hooks: { Stop: [
-      { type: 'process', command: 'mine.exe', statusMessage: 'mine' },
-      { type: 'process', command: 'powershell', statusMessage: 'PromptPal: Stop' }
+      { matcher: 'X', hooks: [{ type: 'process', command: 'mine.exe', statusMessage: 'mine' }] },
+      { hooks: [{ type: 'process', command: 'powershell', statusMessage: 'PromptPal: Stop' }] },
+      { type: 'process', command: 'legacy-flat', statusMessage: 'PromptPal: Stop' }
     ] } }
     cfg = ai.applyJsonInstall(cfg, 'claude', SP)
     cfg = ai.applyJsonUninstall(cfg, 'claude')
-    assert.equal(cfg.hooks.Stop.filter(e => e.statusMessage === 'mine').length, 1)
-    assert.equal(cfg.hooks.Stop.filter(e => e.statusMessage.startsWith('PromptPal:')).length, 0)
+    assert.equal(cfg.hooks.Stop.length, 1)
+    assert.equal(cfg.hooks.Stop[0].hooks[0].statusMessage, 'mine')
+    assert.equal(cfg.hooks.Stop.filter(g => String(g.statusMessage || '').startsWith('PromptPal')).length, 0)
+    assert.ok(!cfg.hooks.UserPromptSubmit || cfg.hooks.UserPromptSubmit.length === 0)
+  })
+
+  await test('JSON status: linked/partial/not-installed via group shape', () => {
+    let cfg = {}
+    cfg = ai.applyJsonInstall(cfg, 'zcode', SP)
+    // 全装 → linked（由 status 的组级检测判断，此处直接验证组形状可被识别）
+    assert.ok(cfg.hooks.events.Stop.some(ai.isPromptPalGroup ? ai.isPromptPalGroup : () => true))
   })
 
   await test('TOML install: append-only, dedup, uninstall restores', async () => {

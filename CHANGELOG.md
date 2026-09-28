@@ -4,6 +4,14 @@ All notable changes to PromptPal will be documented in this file.
 
 ---
 
+## v1.6.1 (2026-09-28)
+
+### Fixed
+- **Agent link actually works now**: whitelist check rejected `~/.promptpal/agent-hook.ps1` on first install because the file did not exist yet (allowed-list canonicalize failed and the entry was skipped) — install/unlink now silently no-opped. Whitelist matching falls back to parent-directory canonicalization for missing files
+- Stats view restyle: gradient overview cards with accent symbols, medal colors for top 3, glow/shine bars, hover interactions
+
+---
+
 ## v1.6.0 (2026-09-26)
 
 ### Added

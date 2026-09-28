@@ -62,21 +62,15 @@ function catColor(cat: string): string {
     <template v-else>
       <!-- 概览四数字 -->
       <div class="stat-grid">
-        <div class="stat-card">
-          <span class="stat-num">{{ totalPrompts }}</span>
-          <span class="stat-key">prompts</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-num">{{ totalUses }}</span>
-          <span class="stat-key">total uses</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-num">{{ usedPrompts }}</span>
-          <span class="stat-key">used &gt; 0</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-num">{{ favCount }}</span>
-          <span class="stat-key">favorites</span>
+        <div class="stat-card" v-for="card in [
+          { num: totalPrompts, key: 'prompts', sym: '◈' },
+          { num: totalUses, key: 'total uses', sym: '⚡' },
+          { num: usedPrompts, key: 'used > 0', sym: '▶' },
+          { num: favCount, key: 'favorites', sym: '★' }
+        ]" :key="card.key">
+          <span class="stat-sym">{{ card.sym }}</span>
+          <span class="stat-num">{{ card.num }}</span>
+          <span class="stat-key">{{ card.key }}</span>
         </div>
       </div>
 
@@ -84,8 +78,8 @@ function catColor(cat: string): string {
       <div class="section-cmd"><span class="sec-path">-- top 10 by usage --</span></div>
       <div v-if="top10.length === 0" class="stats-hint">no usage recorded yet — copy something!</div>
       <div v-else class="rank-list">
-        <div v-for="(p, i) in top10" :key="p.id" class="rank-row">
-          <span class="rank-idx">{{ i + 1 }}</span>
+        <div v-for="(p, i) in top10" :key="p.id" class="rank-row" :class="{ top3: i < 3 }">
+          <span class="rank-idx" :class="'medal-' + (i + 1)">{{ i + 1 }}</span>
           <span class="rank-title" :title="p.title">{{ p.title }}</span>
           <div class="rank-bar-track">
             <div class="rank-bar" :style="{ width: barWidth(p.useCount) }"></div>
@@ -117,14 +111,14 @@ function catColor(cat: string): string {
   height: 100%;
   overflow-y: auto;
   font-family: var(--font-mono);
-  padding: 4px;
+  padding: 4px 4px 20px;
 }
 .stats-cmd {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 0 10px;
-  margin-bottom: 14px;
+  padding: 6px 0 12px;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--border-light);
   font-size: 11px;
 }
@@ -135,111 +129,171 @@ function catColor(cat: string): string {
 .stats-empty {
   font-size: 12px;
   color: var(--text-muted);
-  padding: 40px 0;
+  padding: 48px 0;
   text-align: center;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
 }
 .empty-mark { color: var(--warning); }
 .stats-hint {
   font-size: 11px;
   color: var(--text-muted);
-  padding: 8px 0 14px;
+  padding: 6px 0 14px;
+  font-style: italic;
 }
 
-/* ── 概览 ── */
+/* ── 概览卡片 ── */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 .stat-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  background: var(--bg-secondary);
+  gap: 2px;
+  padding: 14px 16px 12px;
+  background: linear-gradient(160deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--transition-normal), transform var(--transition-normal);
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0.7;
+}
+.stat-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+}
+.stat-sym {
+  font-size: 11px;
+  color: var(--primary-light);
+  opacity: 0.8;
 }
 .stat-num {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 700;
-  color: var(--primary-light);
+  color: var(--text-primary);
+  text-shadow: 0 0 18px rgba(99, 102, 241, 0.35);
+  line-height: 1.2;
 }
 .stat-key {
   font-size: 10px;
   color: var(--text-muted);
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   text-transform: uppercase;
 }
 
-/* ── 榜单 ── */
+/* ── 分节 ── */
 .section-cmd {
-  margin-bottom: 10px;
-  padding-bottom: 4px;
-  border-bottom: 1px dashed var(--border-light);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 14px;
 }
 .sec-path {
   font-size: 10px;
   color: var(--terminal-green);
-  opacity: 0.7;
-  letter-spacing: 0.3px;
+  opacity: 0.8;
+  letter-spacing: 0.5px;
 }
+.section-cmd::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-light), transparent);
+}
+
+/* ── 榜单 ── */
 .rank-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 22px;
+  gap: 7px;
+  margin-bottom: 26px;
 }
 .rank-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
 }
+.rank-row:hover { background: rgba(99, 102, 241, 0.06); }
 .rank-idx {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
-  min-width: 16px;
-  text-align: right;
+  min-width: 20px;
+  text-align: center;
   flex-shrink: 0;
+  font-weight: 600;
 }
+.rank-idx.medal-1 { color: #FFD700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.5); }
+.rank-idx.medal-2 { color: #C0C0C0; text-shadow: 0 0 6px rgba(192, 192, 192, 0.4); }
+.rank-idx.medal-3 { color: #CD7F32; text-shadow: 0 0 6px rgba(205, 127, 50, 0.4); }
+.rank-row.top3 .rank-title { color: var(--primary-light); }
 .rank-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  margin-left: 8px;
+  box-shadow: 0 0 6px currentColor;
+  margin-left: 4px;
 }
 .rank-title {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-primary);
-  min-width: 140px;
-  max-width: 180px;
+  min-width: 150px;
+  max-width: 200px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+  letter-spacing: 0.3px;
 }
 .rank-bar-track {
   flex: 1;
-  height: 10px;
+  height: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .rank-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary), var(--primary-light));
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  transition: width var(--transition-normal);
+  background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 70%, #C7D2FE 100%);
+  border-radius: 6px;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
 }
-.rank-bar.cat { background: inherit; }
+.rank-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+  animation: bar-shine 2.5s ease-in-out infinite;
+}
+@keyframes bar-shine {
+  0% { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(200%); }
+}
+.rank-bar.cat { box-shadow: 0 0 8px currentColor; }
 .rank-count {
-  font-size: 10px;
-  color: var(--text-secondary);
-  min-width: 36px;
+  font-size: 11px;
+  color: var(--primary-light);
+  min-width: 40px;
   text-align: right;
   flex-shrink: 0;
+  font-weight: 600;
 }
 </style>

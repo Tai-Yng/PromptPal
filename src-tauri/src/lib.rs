@@ -127,11 +127,18 @@ fn check_whitelist(path: &str) -> Result<std::path::PathBuf, String> {
         Some(parent.join(file_name))
     });
     let canonical = canonical.ok_or_else(|| format!("file not found: {}", path))?;
+    // 白名单条目也可能尚不存在（如首次写 agent-hook.ps1）——同样退化到父目录比对
     for allowed in whitelist_paths() {
-        if let Ok(allowed_canonical) = allowed.canonicalize() {
-            if allowed_canonical == canonical {
-                return Ok(allowed_canonical);
-            }
+        let allowed_canonical = allowed
+            .canonicalize()
+            .ok()
+            .or_else(|| {
+                let file_name = allowed.file_name()?.to_os_string();
+                let parent = allowed.parent()?.canonicalize().ok()?;
+                Some(parent.join(file_name))
+            });
+        if allowed_canonical.as_deref() == Some(canonical.as_path()) {
+            return Ok(allowed_canonical.unwrap());
         }
     }
     Err("path not in whitelist".into())

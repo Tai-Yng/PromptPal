@@ -56,7 +56,7 @@ const HOOK_SCRIPT_FIXTURE = `param([string]$Agent = 'unknown', [string]$State = 
 $null = [Console]::In.ReadToEnd()
 $json = @{ agent = $Agent; state = $State; ts = [DateTimeOffset]::Now.ToUnixTimeMilliseconds() } |
   ConvertTo-Json -Compress
-[System.IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.promptpal\agent_state.json'), $json, (New-Object System.Text.UTF8Encoding $false))
+[System.IO.File]::WriteAllText((Join-Path (Join-Path $env:USERPROFILE '.promptpal') 'agent_state.json'), $json, (New-Object System.Text.UTF8Encoding $false))
 `
 
 // ===== ZCode / Claude（JSON） =====

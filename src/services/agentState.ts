@@ -51,7 +51,7 @@ $null = [Console]::In.ReadToEnd()
 $json = @{ agent = $Agent; state = $State; ts = [DateTimeOffset]::Now.ToUnixTimeMilliseconds() } |
   ConvertTo-Json -Compress
 # Windows PowerShell 5 的 Set-Content -Encoding UTF8 会写 BOM（严格 JSON.parse 失败），用 WriteAllText 写无 BOM UTF-8
-[System.IO.File]::WriteAllText((Join-Path $env:USERPROFILE '.promptpal\\agent_state.json'), $json, (New-Object System.Text.UTF8Encoding $false))
+[System.IO.File]::WriteAllText((Join-Path (Join-Path $env:USERPROFILE '.promptpal') 'agent_state.json'), $json, (New-Object System.Text.UTF8Encoding $false))
 `
 
 // hookCommand 生成：三端统一形态

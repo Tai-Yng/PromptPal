@@ -10,7 +10,7 @@ import { usePetMovement } from '../composables/usePetMovement'
 import { useContextSuggest } from '../composables/useContextSuggest'
 import { useFocusSync } from '../composables/useFocusSync'
 import { exitApp } from '../services/autoSync'
-import { fetchAgentBadge } from '../services/agentState'
+import { fetchAgentState } from '../services/agentState'
 import { isTauri } from '../services/platform'
 import { loadJson, loadString } from '../services/storage'
 
@@ -203,20 +203,27 @@ const handleClick = async () => {
 
 // ============ AI 代理状态联动（v1.6） ============
 // 1s 轮询状态文件；总开关关闭不轮询。done 触发庆祝后徽章转绿停留 10s。
-const agentBadge = ref<'working' | 'done' | null>(null)
+const agentState = ref<{ state: 'working' | 'done' | 'error'; detail: string } | null>(null)
 let agentTimer: number | null = null
 let doneUntil = 0
 const agentPoll = async () => {
   if (!settingsStore.petConfig.agentLink) {
-    agentBadge.value = null
+    agentState.value = null
     return
   }
-  const badge = await fetchAgentBadge(settingsStore.petConfig.agentLinkTimeoutMs)
-  if (badge === 'done' && agentBadge.value !== 'done') {
+  const info = await fetchAgentState(settingsStore.petConfig.agentLinkTimeoutMs)
+  if (!info) {
+    agentState.value = Date.now() < doneUntil ? { state: 'done', detail: agentState.value?.detail || '' } : null
+    return
+  }
+  if (info.state === 'done' && agentState.value?.state !== 'done') {
     triggerCelebration()
     doneUntil = Date.now() + 10_000
   }
-  agentBadge.value = Date.now() < doneUntil && badge !== 'working' ? 'done' : badge
+  // done 展示期（10s）内若新事件是 working，仍优先展示 done 完成态
+  agentState.value = Date.now() < doneUntil && info.state === 'working'
+    ? { state: 'done', detail: agentState.value?.detail || info.detail }
+    : info
 }
 
 // ============ 庆祝小跳 + 星星粒子（复制成功 / agent 完成共用） ============
@@ -364,8 +371,9 @@ onUnmounted(() => {
       <div v-if="todoStore.focusMode && todoStore.planActive.length > 0" class="focus-indicator" title="focus mode active">
         <span class="focus-dot">●</span>
       </div>
-      <div v-else-if="agentBadge" class="agent-badge" :class="agentBadge" :title="`agent ${agentBadge}`">
+      <div v-else-if="agentState" class="agent-badge" :class="agentState.state" :title="agentState.detail || `agent ${agentState.state}`">
         <span class="badge-dot"></span>
+        <span v-if="agentState.detail" class="badge-text">{{ agentState.detail }}</span>
       </div>
     </div>
 

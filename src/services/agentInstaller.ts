@@ -22,7 +22,11 @@ export const CLAUDE_EXTRA_EVENTS: Array<{ event: string; state: 'working' | 'don
   { event: 'SessionEnd', state: 'idle' },
 ]
 export function eventsFor(agent: AgentId) {
-  return agent === 'zcode' ? AGENT_EVENTS : [...AGENT_EVENTS, ...CLAUDE_EXTRA_EVENTS]
+  // PostToolUseFailure：zcode/claude 支持（codex schema 无此事件）→ 红色 error 徽章
+  const failure = [{ event: 'PostToolUseFailure', state: 'error' as const }]
+  if (agent === 'codex') return AGENT_EVENTS
+  if (agent === 'claude') return [...AGENT_EVENTS, ...CLAUDE_EXTRA_EVENTS, ...failure]
+  return [...AGENT_EVENTS, ...failure]
 }
 
 const MARKER_PREFIX = 'PromptPal: '
@@ -52,11 +56,32 @@ export async function ensureHookScript(): Promise<void> {
 }
 
 // 与 agentState.ts 的 HOOK_SCRIPT 保持一致（此处独立成常量避免依赖运行时路径）
-const HOOK_SCRIPT_FIXTURE = `param([string]$Agent = 'unknown', [string]$State = 'working')
-$null = [Console]::In.ReadToEnd()
-$json = @{ agent = $Agent; state = $State; ts = [DateTimeOffset]::Now.ToUnixTimeMilliseconds() } |
+const HOOK_SCRIPT_FIXTURE = `param(
+  [string]$Agent = 'unknown',
+  [string]$State = 'working',
+  [string]$Event = ''
+)
+# 从事件 stdin 提取一句工作摘要（PostToolUse=工具+文件，UserPromptSubmit=prompt 首行）
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
+$detail = ''
+try {
+  $raw = [Console]::In.ReadToEnd()
+  if ($raw -and $raw.Trim()) {
+    $i = $raw | ConvertFrom-Json
+    if ($Event -eq 'PostToolUse' -or $Event -eq 'PostToolUseFailure') {
+      $leaf = ''
+      if ($i.tool_input -and $i.tool_input.file_path) { $leaf = Split-Path -Leaf $i.tool_input.file_path }
+      if ($i.tool_name -or $leaf) { $detail = ('' + $i.tool_name + ' ' + $leaf).Trim() }
+    } elseif ($Event -eq 'UserPromptSubmit' -and $i.prompt) {
+      $detail = ([string]$i.prompt -split "\\r?\\n")[0]
+    }
+  }
+} catch {}
+if ($detail.Length -gt 60) { $detail = $detail.Substring(0, 57) + '...' }
+$json = @{ agent = $Agent; state = $State; ts = [DateTimeOffset]::Now.ToUnixTimeMilliseconds(); detail = $detail } |
   ConvertTo-Json -Compress
-[System.IO.File]::WriteAllText((Join-Path (Join-Path $env:USERPROFILE '.promptpal') 'agent_state.json'), $json, (New-Object System.Text.UTF8Encoding $false))
+$path = Join-Path (Join-Path $env:USERPROFILE '.promptpal') 'agent_state.json'
+[System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding $false))
 `
 
 // ===== ZCode / Claude（JSON） =====
@@ -89,10 +114,10 @@ export function applyJsonInstall(cfg: any, agent: AgentId, scriptPathTilde: stri
     if (ppGroup) { container[event] = groups; continue } // 已安装：幂等
     let handler: any
     if (isZcode(agent)) {
-      const { command, args } = hookArgs(agent, state, scriptPathTilde)
+      const { command, args } = hookArgs(agent, event, state, scriptPathTilde)
       handler = { type: 'process', command, args, timeoutMs: 10000, statusMessage: MARKER_PREFIX + event }
     } else {
-      handler = { type: 'command', command: hookCommandLine(agent, state, scriptPathTilde), timeout: 10, statusMessage: MARKER_PREFIX + event }
+      handler = { type: 'command', command: hookCommandLine(agent, event, state, scriptPathTilde), timeout: 10, statusMessage: MARKER_PREFIX + event }
     }
     groups.push({ hooks: [handler] })
     container[event] = groups
@@ -151,7 +176,7 @@ async function uninstallJson(agent: AgentId): Promise<void> {
 
 // ===== Codex（TOML append-only） =====
 function tomlBlock(agent: AgentId, event: string, state: string): string {
-  const line = hookCommandLine(agent, state, psScriptPathTilde)
+  const line = hookCommandLine(agent, event, state, psScriptPathTilde)
   return [
     `# ${MARKER_PREFIX}${event}`,
     `[[hooks.${event}]]`,

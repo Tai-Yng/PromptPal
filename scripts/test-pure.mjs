@@ -249,35 +249,43 @@ console.log('agentState.ts:')
   const ag = await import(agentUrl)
   const NOW = 1_000_000_000
 
-  test('working/done 正常解析', () => {
-    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'zcode', state: 'working', ts: NOW - 500 }), NOW, 90_000), 'working')
-    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'claude', state: 'done', ts: NOW - 1000 }), NOW, 90_000), 'done')
+  test('working/done/error 解析 + detail 提取', () => {
+    const w = ag.parseAgentState(JSON.stringify({ agent: 'zcode', state: 'working', ts: NOW - 500, detail: 'Edit agentState.ts' }), NOW, 90_000)
+    assert.equal(w.state, 'working')
+    assert.equal(w.detail, 'Edit agentState.ts')
+    const d = ag.parseAgentState(JSON.stringify({ agent: 'claude', state: 'done', ts: NOW - 1000 }), NOW, 90_000)
+    assert.equal(d.state, 'done')
+    assert.equal(d.detail, '')
+    const e = ag.parseAgentState(JSON.stringify({ agent: 'zcode', state: 'error', ts: NOW - 100, detail: 'Bash build.rs' }), NOW, 90_000)
+    assert.equal(e.state, 'error')
   })
 
   test('超时回落 null', () => {
-    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'zcode', state: 'working', ts: NOW - 90_001 }), NOW, 90_000), null)
+    assert.equal(ag.parseAgentState(JSON.stringify({ agent: 'zcode', state: 'working', ts: NOW - 90_001 }), NOW, 90_000), null)
   })
 
   test('idle 视为无状态', () => {
-    assert.equal(ag.parseAgentBadge(JSON.stringify({ agent: 'zcode', state: 'idle', ts: NOW }), NOW, 90_000), null)
+    assert.equal(ag.parseAgentState(JSON.stringify({ agent: 'zcode', state: 'idle', ts: NOW }), NOW, 90_000), null)
   })
 
   test('损坏文本/缺字段容忍', () => {
-    assert.equal(ag.parseAgentBadge('{broken', NOW, 90_000), null)
-    assert.equal(ag.parseAgentBadge('{"state":"working"}', NOW, 90_000), null)
-    assert.equal(ag.parseAgentBadge('{"agent":"x","state":"hacked","ts":1}', NOW, 90_000), null)
+    assert.equal(ag.parseAgentState('﻿{"agent":"zcode","state":"working","ts":' + NOW + '}', NOW, 90_000).state, 'working')
+    assert.equal(ag.parseAgentState('{broken', NOW, 90_000), null)
+    assert.equal(ag.parseAgentState('{"state":"working"}', NOW, 90_000), null)
+    assert.equal(ag.parseAgentState('{"agent":"x","state":"hacked","ts":1}', NOW, 90_000), null)
   })
 
-  test('hookArgs/hookCommandLine 含 agent/state 且指向脚本', () => {
+  test('hookArgs/hookCommandLine 含 agent/event/state 且指向脚本', () => {
     const sp = 'C:/Users/x/.promptpal/agent-hook.ps1'
-    const { command, args } = ag.hookArgs('zcode', 'working', sp)
+    const { command, args } = ag.hookArgs('zcode', 'PostToolUse', 'working', sp)
     assert.equal(command, 'powershell')
-    assert.deepEqual(args.slice(-4), ['-Agent', 'zcode', '-State', 'working'])
+    assert.deepEqual(args.slice(-6), ['-Agent', 'zcode', '-Event', 'PostToolUse', '-State', 'working'])
     assert.ok(args.includes(sp))
-    const line = ag.hookCommandLine('claude', 'done', sp)
-    assert.ok(line.includes('-Agent claude -State done'))
+    const line = ag.hookCommandLine('claude', 'Stop', 'done', sp)
+    assert.ok(line.includes('-Agent claude -Event Stop -State done'))
     assert.ok(line.includes(sp))
-    assert.ok(ag.HOOK_SCRIPT.includes('agent_state.json'))
+    assert.ok(ag.HOOK_SCRIPT.includes('$Event'))
+    assert.ok(ag.HOOK_SCRIPT.includes('detail'))
   })
 }
 
@@ -336,7 +344,7 @@ console.log('agentInstaller.ts:')
   await test('TOML install: append-only, dedup, uninstall restores', async () => {
     const out = ai.applyTomlInstall(base, 'codex')
     assert.ok(out.startsWith(base))
-    assert.equal((out.match(/# PromptPal:/g) || []).length, 4)
+    assert.equal((out.match(/# PromptPal:/g) || []).length, 3)
     assert.ok(out.includes('[[hooks.Stop]]'))
     assert.ok(out.includes("commandWindows = '"))
     const again = ai.applyTomlInstall(out, 'codex')

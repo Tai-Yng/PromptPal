@@ -495,3 +495,22 @@
   0%, 100% { opacity: 0.5; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1.1); }
 }
+
+/* 徽章文本条（v1.6.1：显示 agent 当前工作内容） */
+.agent-badge .badge-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  max-width: 170px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.agent-badge.working { border-color: rgba(59, 130, 246, 0.4); }
+.agent-badge.done { border-color: rgba(74, 222, 128, 0.4); }
+.agent-badge.error .badge-dot {
+  background: #EF4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+.agent-badge.error { border-color: rgba(239, 68, 68, 0.4); }

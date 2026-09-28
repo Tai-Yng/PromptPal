@@ -9,13 +9,21 @@ import { hookArgs, hookCommandLine } from './agentState'
 
 export type AgentId = 'zcode' | 'claude' | 'codex'
 
-// 事件 → 桌宠状态映射（三端一致）
+// 事件 → 桌宠状态映射。事件集按端定制：
+// - ZCode 仅支持七事件（SessionStart/UserPromptSubmit/PreToolUse/PermissionRequest/
+//   PostToolUse/PostToolUseFailure/Stop）——没有 SessionEnd
+// - Claude Code / Codex 支持 SessionEnd
 export const AGENT_EVENTS: Array<{ event: string; state: 'working' | 'done' | 'idle' }> = [
   { event: 'UserPromptSubmit', state: 'working' },
   { event: 'PostToolUse', state: 'working' },
   { event: 'Stop', state: 'done' },
+]
+export const CLAUDE_EXTRA_EVENTS: Array<{ event: string; state: 'working' | 'done' | 'idle' }> = [
   { event: 'SessionEnd', state: 'idle' },
 ]
+export function eventsFor(agent: AgentId) {
+  return agent === 'zcode' ? AGENT_EVENTS : [...AGENT_EVENTS, ...CLAUDE_EXTRA_EVENTS]
+}
 
 const MARKER_PREFIX = 'PromptPal: '
 const CONFIG_PATHS: Record<AgentId, string> = {
@@ -75,7 +83,7 @@ function isPromptPalEntry(e: any): boolean {
 // PromptPal 的处理器放在专属组的 hooks 里（组级标记 statusMessage 不合法——那是 v1.6.0 的 bug 形状）
 export function applyJsonInstall(cfg: any, agent: AgentId, scriptPathTilde: string): any {
   const container = jsonEventsContainer(cfg, agent)
-  for (const { event, state } of AGENT_EVENTS) {
+  for (const { event, state } of eventsFor(agent)) {
     const groups: any[] = Array.isArray(container[event]) ? container[event] : []
     const ppGroup = groups.find(g => isPromptPalGroup(g))
     if (ppGroup) { container[event] = groups; continue } // 已安装：幂等
@@ -104,7 +112,7 @@ function isPromptPalGroup(g: any): boolean {
 // 纯函数：JSON 配置卸载（移除 PromptPal 处理器与空组，用户条目不动）
 export function applyJsonUninstall(cfg: any, agent: AgentId): any {
   const container = jsonEventsContainer(cfg, agent)
-  for (const { event } of AGENT_EVENTS) {
+  for (const { event } of eventsFor(agent)) {
     const groups = container[event]
     if (!Array.isArray(groups)) continue
     const cleaned = groups
@@ -156,7 +164,7 @@ function tomlBlock(agent: AgentId, event: string, state: string): string {
 export function applyTomlInstall(text: string, agent: AgentId): string {
   let out = text
   let added = false
-  for (const { event, state } of AGENT_EVENTS) {
+  for (const { event, state } of eventsFor(agent)) {
     if (out.includes('# ' + MARKER_PREFIX + event)) continue
     out += '\n' + tomlBlock(agent, event, state)
     added = true
@@ -210,15 +218,17 @@ export async function agentStatus(agent: AgentId): Promise<LinkStatus> {
   const raw = await readCfg(CONFIG_PATHS[agent]).catch(() => null)
   if (raw === null) return 'missing'
   if (agent === 'codex') {
-    const hits = AGENT_EVENTS.filter(({ event }) => raw.includes(`# ${MARKER_PREFIX}${event}`)).length
-    return hits === 0 ? 'not-installed' : hits === AGENT_EVENTS.length ? 'linked' : 'partial'
+    const expected = eventsFor(agent)
+    const hits = expected.filter(({ event }) => raw.includes(`# ${MARKER_PREFIX}${event}`)).length
+    return hits === 0 ? 'not-installed' : hits === expected.length ? 'linked' : 'partial'
   }
   try {
     const cfg = JSON.parse(raw)
     const container = jsonEventsContainer(cfg, agent)
-    const hits = AGENT_EVENTS.filter(({ event }) =>
+    const expected = eventsFor(agent)
+    const hits = expected.filter(({ event }) =>
       Array.isArray(container[event]) && container[event].some(isPromptPalGroup)).length
-    return hits === 0 ? 'not-installed' : hits === AGENT_EVENTS.length ? 'linked' : 'partial'
+    return hits === 0 ? 'not-installed' : hits === expected.length ? 'linked' : 'partial'
   } catch {
     return 'missing'
   }

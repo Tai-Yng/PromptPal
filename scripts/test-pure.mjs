@@ -301,10 +301,11 @@ console.log('agentInstaller.ts:')
     assert.equal(pp.hooks[0].statusMessage, 'PromptPal: PostToolUse')
     assert.equal(pp.hooks[0].type, 'process')
     assert.ok(Array.isArray(pp.hooks[0].args))
-    // 四事件齐全
-    for (const e of ['UserPromptSubmit', 'PostToolUse', 'Stop', 'SessionEnd']) {
+    // zcode 三事件齐全（SessionEnd 非 ZCode 支持事件，不安装）
+    for (const e of ['UserPromptSubmit', 'PostToolUse', 'Stop']) {
       assert.ok(out.hooks.events[e].some(g => (g.hooks || []).some(h => h.statusMessage === 'PromptPal: ' + e)))
     }
+    assert.ok(!out.hooks.events.SessionEnd || out.hooks.events.SessionEnd.length === 0)
     // 幂等
     const again = ai.applyJsonInstall(out, 'zcode', SP)
     assert.equal(again.hooks.events.PostToolUse.filter(g => g.hooks.some(h => String(h.statusMessage).startsWith('PromptPal'))).length, 1)

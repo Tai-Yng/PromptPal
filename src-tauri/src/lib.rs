@@ -461,13 +461,16 @@ pub fn run() {
             .build(),
         )?;
 
-        // 注册全局热键 Alt+Space → 打开快速注入窗口
+        // 注册全局热键 Ctrl+Alt+P → 打开快速注入窗口
+        // 热键被其他应用占用时仅警告不崩溃（其余功能照常，注入窗口仍可从托盘/面板进入）
         let handle = app.handle().clone();
-        app.handle().global_shortcut().on_shortcut("Ctrl+Alt+P", move |_app, _shortcut, event| {
+        if let Err(e) = app.handle().global_shortcut().on_shortcut("Ctrl+Alt+P", move |_app, _shortcut, event| {
             if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                 let _ = create_quick_inject(&handle);
             }
-        })?;
+        }) {
+            log::warn!("global hotkey Ctrl+Alt+P unavailable: {} — quick inject via tray still works", e);
+        }
 
         // Pet 窗口定位到右下角
         if let Some(pet_win) = app.get_webview_window("pet") {

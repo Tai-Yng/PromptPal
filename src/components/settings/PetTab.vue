@@ -326,7 +326,7 @@ const previewStyle = computed(() => pending.value ? ({
               {{ agentStates[row.id] === 'linked' ? 'unlink' : 'link' }}
             </button>
           </div>
-          <div v-if="agentMsg" class="sprite-err ok">{{ agentMsg }}</div>
+          <div v-if="agentMsg" class="link-msg" :class="agentMsg.startsWith('[OK]') ? 'ok' : 'err'">{{ agentMsg }}</div>
         </div>
       </div>
     </div>

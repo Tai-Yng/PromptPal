@@ -112,7 +112,7 @@ const handleIgnorePull = () => {
       </div>
 
       <div class="sidebar-footer">
-        <span class="version-line">promptpal v2.0.0</span>
+        <span class="version-line">promptpal v{{ __APP_VERSION__ }}</span>
         <span class="version-line tui">[TUI]</span>
       </div>
     </nav>

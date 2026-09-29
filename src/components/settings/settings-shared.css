@@ -370,3 +370,13 @@
 .agent-status.missing { color: #FCA5A5; }
 .sprite-btn.sm { padding: 2px 10px; font-size: 10px; }
 .sprite-err.ok { color: var(--terminal-green); }
+
+/* ── Agent link 消息（语义色） ── */
+.link-msg {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+}
+.link-msg.ok { color: var(--terminal-green); border: 1px solid rgba(74, 222, 128, 0.25); background: rgba(74, 222, 128, 0.06); }
+.link-msg.err { color: #FCA5A5; border: 1px solid rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.06); }

@@ -342,7 +342,15 @@ onUnmounted(() => {
       <!-- 桌宠形象：精灵图模式 / CSS 机器人 -->
       <div v-if="!spriteMode" class="pet-body">
         <div class="antenna">
-          <div class="antenna-ball" :class="{ active: state === 'active' || showCopySuccess }"></div>
+          <div
+            class="antenna-ball"
+            :class="{
+              active: (state === 'active' || showCopySuccess) && !agentState,
+              'agent-working': agentState?.state === 'working',
+              'agent-done': agentState?.state === 'done',
+              'agent-error': agentState?.state === 'error'
+            }"
+          ></div>
         </div>
         <div class="head">
           <div class="visor">

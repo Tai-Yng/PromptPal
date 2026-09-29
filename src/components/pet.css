@@ -568,3 +568,18 @@
   0% { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.95); }
   100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
+
+/* ── 天线球 = 代理状态 LED（v1.7：睡觉也保持颜色）── */
+.antenna-ball.agent-working {
+  background: #3B82F6;
+  box-shadow: 0 0 14px #3B82F6;
+  animation: badge-pulse 1.2s ease-in-out infinite;
+}
+.antenna-ball.agent-done {
+  background: var(--terminal-green, #4ADE80);
+  box-shadow: 0 0 14px var(--terminal-green, #4ADE80);
+}
+.antenna-ball.agent-error {
+  background: #EF4444;
+  box-shadow: 0 0 14px #EF4444;
+}

@@ -17,6 +17,7 @@ import { loadJson, loadString } from '../services/storage'
 const petStore = usePetStyleStore()
 const settingsStore = useSettingsStore()
 const todoStore = useTodoStore()
+const store = usePromptStore()  // 组件级单例（原 handleClick 内每次点击重建）
 
 // ============ 运动状态机（行走/拖拽/睡眠） ============
 const isCopying = ref(false)
@@ -172,7 +173,6 @@ const handleClick = async () => {
   // 如果正在拖拽，不触发点击
   if (isDragging.value) return
 
-  const store = usePromptStore()
   if (!settingsStore.petConfig.dblClickCopy) return
   if (isCopying.value) return
   isCopying.value = true

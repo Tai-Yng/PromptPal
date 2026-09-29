@@ -368,9 +368,12 @@ onUnmounted(() => {
       <div v-if="todoStore.focusMode && todoStore.planActive.length > 0" class="focus-indicator" title="focus mode active">
         <span class="focus-dot">●</span>
       </div>
-      <div v-else-if="agentState" class="agent-badge" :class="agentState.state" :title="agentState.detail || `agent ${agentState.state}`">
-        <span class="badge-dot"></span>
-        <span v-if="agentState.detail" class="badge-text">{{ agentState.detail }}</span>
+      <div v-else-if="agentState" class="agent-bubble" :class="agentState.state">
+        <div class="ab-header">
+          <span class="ab-agent">⌁ {{ agentState.agent }}</span>
+          <span class="ab-state">{{ agentState.state === 'working' ? 'working' : agentState.state === 'done' ? '✓ done' : '✗ error' }}</span>
+        </div>
+        <div v-if="agentState.detail" class="ab-detail">&gt; {{ agentState.detail }}</div>
       </div>
     </div>
 

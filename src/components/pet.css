@@ -514,3 +514,57 @@
   box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
 }
 .agent-badge.error { border-color: rgba(239, 68, 68, 0.4); }
+
+/* ── Agent 状态气泡（todo focus-bubble 同款风格，v1.7）── */
+.agent-bubble {
+  position: absolute;
+  bottom: 118px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--bg-secondary, #1E293B);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 7px 10px;
+  z-index: 5;
+  pointer-events: none;
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.25);
+  animation: bubble-in 0.25s ease-out;
+}
+.agent-bubble.error { border-color: #EF4444; box-shadow: 0 0 16px rgba(239, 68, 68, 0.25); }
+.agent-bubble.done { border-color: var(--terminal-green, #4ADE80); box-shadow: 0 0 16px rgba(74, 222, 128, 0.25); }
+.ab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+.ab-agent {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--primary-light);
+  letter-spacing: 0.5px;
+}
+.ab-state {
+  font-size: 9px;
+  color: #93C5FD;
+  animation: badge-pulse 1.2s ease-in-out infinite;
+}
+.agent-bubble.done .ab-state { color: var(--terminal-green, #4ADE80); animation: none; }
+.agent-bubble.error .ab-state { color: #FCA5A5; animation: none; }
+.ab-detail {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ab-detail::first-letter { color: var(--terminal-green, #4ADE80); font-weight: 700; }
+@keyframes bubble-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.95); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}

@@ -4,6 +4,19 @@ All notable changes to PromptPal will be documented in this file.
 
 ---
 
+## v1.7.0 (2026-09-29)
+
+### Fixed
+- **ZCode agent link detail**: UserPromptSubmit events now extract the prompt's first line correctly — hook stdin reads with explicit UTF-8 input encoding (PS 5 defaults to GBK on zh-CN systems, mojibake'ing Chinese) and the field name confirmed via live stdin capture
+- PostToolUseFailure events mapped to a red error badge (zcode/claude)
+
+### Changed
+- **Badge responsiveness**: state poll 1000ms -> 500ms with an immediate first poll; removed the 10s done-hold that suppressed fresh working/error states during the celebration window
+- **Stats + agent hook polish**: per-agent hook event sets (zcode drops unsupported SessionEnd), hook script path written as absolute (PS -File does not expand ~), agents section messages semantically colored
+- **Version injection**: sidebar version from package.json via vite define (no more stale v2.0.0); TodoPanel split into PlanView/CategoryView subcomponents; cli metadata aligned
+
+---
+
 ## v1.6.1 (2026-09-28)
 
 ### Fixed
